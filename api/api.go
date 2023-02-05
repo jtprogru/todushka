@@ -28,6 +28,8 @@ func NewApi(c *config.Config) *Api {
 		middleware.Logger,          // Log API request calls
 		middleware.RedirectSlashes, // Redirect slashes to no slash URL versions
 		middleware.Recoverer,       // Recover from panics without crashing server
+		middleware.RealIP,
+		middleware.RequestID,
 	)
 
 	r.Route("/v1", func(r chi.Router) {
