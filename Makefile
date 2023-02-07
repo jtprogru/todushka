@@ -8,9 +8,9 @@ export SYS_GOFMT=$(shell which gofmt)
 export SYS_GOLANGCI_LINT=$(shell which golangci-lint)
 
 .PHONY: run
-## Run as go run main.go
-run: main.go
-	$(SYS_GO) run ./*.go
+## Run as go run cmd/main.go
+run: cmd/main.go
+	$(SYS_GO) run cmd/main.go
 
 .PHONY: tidy
 ## Install all requirements

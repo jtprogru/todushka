@@ -5,35 +5,36 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 )
 
 var (
-	ListTodos = map[string]Todo{
-		"1": {
-			Id:          "1",
+	ListTodos = map[int]Todo{
+		1: {
+			Id:          1,
 			Summary:     "Todo 1 Hello world",
 			Description: "Todo 1 Hello world from planet earth",
 			IsDone:      false,
 			ListId:      "1",
 		},
-		"2": {
-			Id:          "2",
+		2: {
+			Id:          2,
 			Summary:     "Todo 2 Hello world",
 			Description: "Todo 2 Hello world from planet earth",
 			IsDone:      false,
 			ListId:      "1",
 		},
-		"3": {
-			Id:          "3",
+		3: {
+			Id:          3,
 			Summary:     "Todo 3 Hello world",
 			Description: "Todo 3 Hello world from planet earth",
 			IsDone:      false,
 			ListId:      "2",
 		},
-		"4": {
-			Id:          "4",
+		4: {
+			Id:          4,
 			Summary:     "Todo 4 Hello world",
 			Description: "Todo 4 Hello world from planet earth",
 			IsDone:      false,
@@ -52,10 +53,10 @@ func todoToJson(t any) []byte {
 }
 
 type Todo struct {
-	Id          string `json:"id"`
-	Summary     string `json:"summary"`
-	Description string `json:"description"`
-	IsDone      bool   `json:"is_done"`
+	Id          int    `json:"id" db:"id"`
+	Summary     string `json:"summary" db:"summary"`
+	Description string `json:"description" db:"description"`
+	IsDone      bool   `json:"is_done" db:"is_done"`
 	ListId      string `json:"list_id"`
 }
 
@@ -70,7 +71,11 @@ func Routes() *chi.Mux {
 
 func GetTodo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	todoID := chi.URLParam(r, "todoID")
+	todoID, err := strconv.Atoi(chi.URLParam(r, "todoID"))
+	if err != nil {
+		w.Write([]byte(`url parameter todoID is not number`))
+		return
+	}
 	t := ListTodos[todoID]
 	w.Write(todoToJson(t))
 }
@@ -109,10 +114,10 @@ func CreateTodo(w http.ResponseWriter, r *http.Request) {
 func GetAllTodos(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	todos := []Todo{
-		ListTodos["1"],
-		ListTodos["2"],
-		ListTodos["3"],
-		ListTodos["4"],
+		ListTodos[1],
+		ListTodos[2],
+		ListTodos[3],
+		ListTodos[4],
 	}
 	w.Write(todoToJson(todos))
 }
