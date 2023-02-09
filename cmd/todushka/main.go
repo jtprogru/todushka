@@ -14,7 +14,8 @@ func main() {
 	cfg := config.New()
 	db, err := postgres.NewPostgresDB(cfg.Db)
 	if err != nil {
-		panic("db ")
+		log.Printf("can't init connection to db: %v", err.Error())
+		return
 	}
 	store := postgres.New(db)
 	repo := repository.New(store)

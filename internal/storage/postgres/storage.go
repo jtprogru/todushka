@@ -5,6 +5,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/jtprogru/todushka/internal/config"
+	_ "github.com/lib/pq"
 )
 
 type storage struct {

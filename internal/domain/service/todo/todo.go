@@ -11,6 +11,7 @@ import (
 
 type Repository interface {
 	GetById(ctx context.Context, todoId int) (entity.Todo, error)
+	GetAllTodos(ctx context.Context) ([]entity.Todo, error)
 }
 
 type srv struct {
@@ -24,6 +25,17 @@ func New(repo Repository) *srv {
 }
 
 func (s *srv) GetById(ctx context.Context, todoId int) (entity.Todo, error) {
-	todo, _ := s.repo.GetById(ctx, todoId)
+	todo, err := s.repo.GetById(ctx, todoId)
+	if err != nil {
+		return entity.Todo{}, err
+	}
 	return todo, nil
+}
+
+func (s *srv) GetAllTodos(ctx context.Context) ([]entity.Todo, error) {
+	todos, err := s.repo.GetAllTodos(ctx)
+	if err != nil {
+		return []entity.Todo{}, err
+	}
+	return todos, nil
 }

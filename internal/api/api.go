@@ -6,6 +6,7 @@ import (
 
 	chi "github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/httplog"
 	"github.com/jtprogru/todushka/internal/config"
 	"github.com/jtprogru/todushka/internal/controller/rest/todo"
 )
@@ -21,9 +22,16 @@ func (a *Api) Start() {
 
 func New(c *config.ServerConfig, svc todo.Service) *Api {
 	r := chi.NewRouter()
+	// Logger
+	logger := httplog.NewLogger("todushka", httplog.Options{
+		JSON:     true,
+		LogLevel: "debug",
+	})
+	r.Use(httplog.RequestLogger(logger))
+	r.Use(middleware.Heartbeat("/ping"))
+
 	// A good base middleware stack
 	r.Use(
-		middleware.Logger,          // Log API request calls
 		middleware.RedirectSlashes, // Redirect slashes to no slash URL versions
 		middleware.Recoverer,       // Recover from panics without crashing server
 		middleware.RealIP,
