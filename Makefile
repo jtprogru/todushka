@@ -41,7 +41,7 @@ test:
 .PHONY: lint
 ## Run golangci-lint
 lint:
-	$(SYS_GOLANGCI_LINT) -v run --out-format=colored-line-number --fix ./...
+	$(SYS_GOLANGCI_LINT) -v run --out-format=colored-line-number --fix --config .golangci.yaml ./...
 
 .PHONY: help
 ## Show this help message
