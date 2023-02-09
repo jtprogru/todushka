@@ -3,16 +3,16 @@ package todo
 import (
 	"context"
 
-	"github.com/go-chi/chi/v5"
+	chi "github.com/go-chi/chi/v5"
 	"github.com/jtprogru/todushka/internal/domain/entity"
 )
 
 type Service interface {
-	GetById(ctx context.Context, todoId int) (entity.Todo, error)
+	GetByID(ctx context.Context, todoID int) (entity.Todo, error)
 	GetAllTodos(ctx context.Context) ([]entity.Todo, error)
-	DeleteTodo(ctx context.Context, todoId int) error
+	DeleteTodo(ctx context.Context, todoID int) error
 	CreateTodo(ctx context.Context, todo entity.TodoCreate) (entity.Todo, error)
-	UpdateTodo(ctx context.Context, todoId int, todo entity.TodoUpdate) (entity.Todo, error)
+	UpdateTodo(ctx context.Context, todoID int, todo entity.TodoUpdate) (entity.Todo, error)
 }
 
 type Handler struct {

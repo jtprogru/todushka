@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-func AnyToJson(t any) []byte {
+func AnyToJSON(t any) []byte {
 	b, err := json.Marshal(t)
 	if err != nil {
 		fmt.Println(err)

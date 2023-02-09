@@ -6,7 +6,7 @@ import (
 
 type Config struct {
 	Server *ServerConfig
-	Db     *DbConfig
+	DB     *DBConfig
 }
 
 type ServerConfig struct {
@@ -14,7 +14,7 @@ type ServerConfig struct {
 	LogLevel string
 }
 
-type DbConfig struct {
+type DBConfig struct {
 	Host     string
 	Port     string
 	Username string
@@ -43,7 +43,7 @@ func New() *Config {
 
 	return &Config{
 		Server: newServerConfig(sc),
-		Db:     newDbConfig(dbc),
+		DB:     newDBConfig(dbc),
 	}
 }
 
@@ -54,8 +54,8 @@ func newServerConfig(v *viper.Viper) *ServerConfig {
 	}
 }
 
-func newDbConfig(v *viper.Viper) *DbConfig {
-	return &DbConfig{
+func newDBConfig(v *viper.Viper) *DBConfig {
+	return &DBConfig{
 		Host:     v.GetString("host"),
 		Port:     v.GetString("port"),
 		Username: v.GetString("username"),

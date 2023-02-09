@@ -11,16 +11,16 @@ import (
 	"github.com/jtprogru/todushka/internal/controller/rest/todo"
 )
 
-type Api struct {
+type API struct {
 	cfg *config.ServerConfig
 	R   *chi.Mux
 }
 
-func (a *Api) Start() {
+func (a *API) Start() {
 	log.Fatalln(http.ListenAndServe(a.cfg.Addr, a.R))
 }
 
-func New(c *config.ServerConfig, svc todo.Service) *Api {
+func New(c *config.ServerConfig, svc todo.Service) *API {
 	r := chi.NewRouter()
 	// Logger
 	logger := httplog.NewLogger("todushka", httplog.Options{
@@ -41,11 +41,9 @@ func New(c *config.ServerConfig, svc todo.Service) *Api {
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Mount("/api/todo", todo.Routes(svc))
-		// r.Mount("/api/list", list.Routes())
-		// r.Mount("/api/project", project.Routes())
 	})
 
-	return &Api{
+	return &API{
 		cfg: c,
 		R:   r,
 	}

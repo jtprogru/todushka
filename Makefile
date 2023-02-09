@@ -5,6 +5,7 @@ SHELL := /bin/bash
 # Global vars
 export SYS_GO=$(shell which go)
 export SYS_GOFMT=$(shell which gofmt)
+export SYS_GOIMPORTS=$(shell which goimports)
 export SYS_GOLANGCI_LINT=$(shell which golangci-lint)
 
 .PHONY: run
@@ -22,6 +23,11 @@ tidy: go.mod
 fmt:
 	$(SYS_GOFMT) -s -w .
 
+.PHONY: imports
+## Run goimports
+imports:
+	$(SYS_GOIMPORTS) -w -e -l -v .
+
 .PHONY: vet
 ## Run go vet ./...
 vet:
@@ -35,7 +41,7 @@ test:
 .PHONY: lint
 ## Run golangci-lint
 lint:
-	@$(SYS_GOLANGCI_LINT) -v run --out-format=colored-line-number
+	$(SYS_GOLANGCI_LINT) -v run --out-format=colored-line-number --fix ./...
 
 .PHONY: help
 ## Show this help message

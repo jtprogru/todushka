@@ -7,11 +7,11 @@ import (
 )
 
 type Storage interface {
-	GetById(ctx context.Context, todoId int) (entity.Todo, error)
+	GetByID(ctx context.Context, todoID int) (entity.Todo, error)
 	GetAllTodos(ctx context.Context) ([]entity.Todo, error)
-	DeleteTodo(ctx context.Context, todoId int) error
+	DeleteTodo(ctx context.Context, todoID int) error
 	CreateTodo(ctx context.Context, todo entity.TodoCreate) (entity.Todo, error)
-	UpdateTodo(ctx context.Context, todoId int, todo entity.TodoUpdate) (entity.Todo, error)
+	UpdateTodo(ctx context.Context, todoID int, todo entity.TodoUpdate) (entity.Todo, error)
 }
 
 type repo struct {
@@ -24,8 +24,8 @@ func New(store Storage) *repo {
 	}
 }
 
-func (r *repo) GetById(ctx context.Context, todoId int) (entity.Todo, error) {
-	todo, err := r.store.GetById(ctx, todoId)
+func (r *repo) GetByID(ctx context.Context, todoID int) (entity.Todo, error) {
+	todo, err := r.store.GetByID(ctx, todoID)
 	if err != nil {
 		return entity.Todo{}, err
 	}
@@ -40,8 +40,8 @@ func (r *repo) GetAllTodos(ctx context.Context) ([]entity.Todo, error) {
 	return todos, nil
 }
 
-func (r *repo) DeleteTodo(ctx context.Context, todoId int) error {
-	err := r.store.DeleteTodo(ctx, todoId)
+func (r *repo) DeleteTodo(ctx context.Context, todoID int) error {
+	err := r.store.DeleteTodo(ctx, todoID)
 	if err != nil {
 		return err
 	}
@@ -56,8 +56,8 @@ func (r *repo) CreateTodo(ctx context.Context, todo entity.TodoCreate) (entity.T
 	return t, nil
 }
 
-func (r *repo) UpdateTodo(ctx context.Context, todoId int, todo entity.TodoUpdate) (entity.Todo, error) {
-	t, err := r.store.UpdateTodo(ctx, todoId, todo)
+func (r *repo) UpdateTodo(ctx context.Context, todoID int, todo entity.TodoUpdate) (entity.Todo, error) {
+	t, err := r.store.UpdateTodo(ctx, todoID, todo)
 	if err != nil {
 		return entity.Todo{}, err
 	}

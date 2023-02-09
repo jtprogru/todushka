@@ -12,7 +12,7 @@ import (
 
 func main() {
 	cfg := config.New()
-	db, err := postgres.NewPostgresDB(cfg.Db)
+	db, err := postgres.NewPostgresDB(cfg.DB)
 	if err != nil {
 		log.Printf("can't init connection to db: %v", err.Error())
 		return

@@ -18,7 +18,7 @@ func (h *Handler) CreateTodo() http.HandlerFunc {
 			msg["result"] = fmt.Sprintf("todo bad request: %v", err.Error())
 			msg["status"] = http.StatusBadRequest
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write(pkg.AnyToJson(msg))
+			_, _ = w.Write(pkg.AnyToJSON(msg))
 			return
 		}
 
@@ -27,11 +27,11 @@ func (h *Handler) CreateTodo() http.HandlerFunc {
 			msg["result"] = fmt.Sprintf("todo can't create with err: %v", err.Error())
 			msg["status"] = http.StatusInternalServerError
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write(pkg.AnyToJson(msg))
+			_, _ = w.Write(pkg.AnyToJSON(msg))
 			return
 		}
 		msg["result"] = todo
 		msg["status"] = http.StatusCreated
-		w.Write(pkg.AnyToJson(msg))
+		_, _ = w.Write(pkg.AnyToJSON(msg))
 	}
 }
