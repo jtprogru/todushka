@@ -10,7 +10,8 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Addr string
+	Addr     string
+	LogLevel string
 }
 
 type DbConfig struct {
@@ -48,7 +49,8 @@ func New() *Config {
 
 func newServerConfig(v *viper.Viper) *ServerConfig {
 	return &ServerConfig{
-		Addr: v.GetString("addr"),
+		Addr:     v.GetString("addr"),
+		LogLevel: v.GetString("log_level"),
 	}
 }
 

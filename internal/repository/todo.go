@@ -9,6 +9,7 @@ import (
 type Storage interface {
 	GetById(ctx context.Context, todoId int) (entity.Todo, error)
 	GetAllTodos(ctx context.Context) ([]entity.Todo, error)
+	DeleteTodo(ctx context.Context, todoId int) error
 }
 
 type repo struct {
@@ -35,4 +36,12 @@ func (r *repo) GetAllTodos(ctx context.Context) ([]entity.Todo, error) {
 		return []entity.Todo{}, err
 	}
 	return todos, nil
+}
+
+func (r *repo) DeleteTodo(ctx context.Context, todoId int) error {
+	err := r.store.DeleteTodo(ctx, todoId)
+	if err != nil {
+		return err
+	}
+	return nil
 }

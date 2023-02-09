@@ -25,8 +25,9 @@ func New(c *config.ServerConfig, svc todo.Service) *Api {
 	// Logger
 	logger := httplog.NewLogger("todushka", httplog.Options{
 		JSON:     true,
-		LogLevel: "debug",
+		LogLevel: c.LogLevel,
 	})
+
 	r.Use(httplog.RequestLogger(logger))
 	r.Use(middleware.Heartbeat("/ping"))
 

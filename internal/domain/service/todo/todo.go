@@ -12,6 +12,7 @@ import (
 type Repository interface {
 	GetById(ctx context.Context, todoId int) (entity.Todo, error)
 	GetAllTodos(ctx context.Context) ([]entity.Todo, error)
+	DeleteTodo(ctx context.Context, todoId int) error
 }
 
 type srv struct {
@@ -38,4 +39,12 @@ func (s *srv) GetAllTodos(ctx context.Context) ([]entity.Todo, error) {
 		return []entity.Todo{}, err
 	}
 	return todos, nil
+}
+
+func (s *srv) DeleteTodo(ctx context.Context, todoId int) error {
+	err := s.repo.DeleteTodo(ctx, todoId)
+	if err != nil {
+		return err
+	}
+	return nil
 }

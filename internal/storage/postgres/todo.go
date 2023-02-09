@@ -25,3 +25,12 @@ func (s *storage) GetAllTodos(ctx context.Context) ([]entity.Todo, error) {
 	}
 	return todos, nil
 }
+
+func (s *storage) DeleteTodo(ctx context.Context, todoId int) error {
+	query := `delete from todo_items where id=$1;`
+	_, err := s.db.Exec(query, todoId)
+	if err != nil {
+		return err
+	}
+	return nil
+}
