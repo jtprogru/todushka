@@ -14,6 +14,7 @@ type Repository interface {
 	GetAllTodos(ctx context.Context) ([]entity.Todo, error)
 	DeleteTodo(ctx context.Context, todoId int) error
 	CreateTodo(ctx context.Context, todo entity.TodoCreate) (entity.Todo, error)
+	UpdateTodo(ctx context.Context, todoId int, todo entity.TodoUpdate) (entity.Todo, error)
 }
 
 type srv struct {
@@ -52,6 +53,14 @@ func (s *srv) DeleteTodo(ctx context.Context, todoId int) error {
 
 func (s *srv) CreateTodo(ctx context.Context, todo entity.TodoCreate) (entity.Todo, error) {
 	t, err := s.repo.CreateTodo(ctx, todo)
+	if err != nil {
+		return entity.Todo{}, err
+	}
+	return t, nil
+}
+
+func (s *srv) UpdateTodo(ctx context.Context, todoId int, todo entity.TodoUpdate) (entity.Todo, error) {
+	t, err := s.repo.UpdateTodo(ctx, todoId, todo)
 	if err != nil {
 		return entity.Todo{}, err
 	}

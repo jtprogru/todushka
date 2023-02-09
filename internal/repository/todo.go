@@ -11,6 +11,7 @@ type Storage interface {
 	GetAllTodos(ctx context.Context) ([]entity.Todo, error)
 	DeleteTodo(ctx context.Context, todoId int) error
 	CreateTodo(ctx context.Context, todo entity.TodoCreate) (entity.Todo, error)
+	UpdateTodo(ctx context.Context, todoId int, todo entity.TodoUpdate) (entity.Todo, error)
 }
 
 type repo struct {
@@ -49,6 +50,14 @@ func (r *repo) DeleteTodo(ctx context.Context, todoId int) error {
 
 func (r *repo) CreateTodo(ctx context.Context, todo entity.TodoCreate) (entity.Todo, error) {
 	t, err := r.store.CreateTodo(ctx, todo)
+	if err != nil {
+		return entity.Todo{}, err
+	}
+	return t, nil
+}
+
+func (r *repo) UpdateTodo(ctx context.Context, todoId int, todo entity.TodoUpdate) (entity.Todo, error) {
+	t, err := r.store.UpdateTodo(ctx, todoId, todo)
 	if err != nil {
 		return entity.Todo{}, err
 	}

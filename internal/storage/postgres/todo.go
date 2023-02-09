@@ -51,3 +51,15 @@ func (s *storage) CreateTodo(ctx context.Context, todo entity.TodoCreate) (entit
 
 	return resp, nil
 }
+
+func (s *storage) UpdateTodo(ctx context.Context, todoId int, todo entity.TodoUpdate) (entity.Todo, error) {
+	query := `update todo_items set summary = $1, description = $2, is_done = $3 where id = $4 returning id, summary, description, is_done;`
+	var resp entity.Todo
+
+	err := s.db.QueryRow(query, todo.Summary, todo.Description, todo.IsDone, todoId).Scan(&resp.Id, &resp.Summary, &resp.Description, &resp.IsDone)
+	if err != nil {
+		return resp, err
+	}
+
+	return resp, nil
+}

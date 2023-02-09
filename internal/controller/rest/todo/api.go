@@ -12,6 +12,7 @@ type Service interface {
 	GetAllTodos(ctx context.Context) ([]entity.Todo, error)
 	DeleteTodo(ctx context.Context, todoId int) error
 	CreateTodo(ctx context.Context, todo entity.TodoCreate) (entity.Todo, error)
+	UpdateTodo(ctx context.Context, todoId int, todo entity.TodoUpdate) (entity.Todo, error)
 }
 
 type Handler struct {
@@ -29,6 +30,7 @@ func Routes(srv Service) *chi.Mux {
 	handler := New(srv)
 
 	router.Get("/{todoID}", handler.GetTodo())
+	router.Put("/{todoID}", handler.UpdateTodo())
 	router.Get("/", handler.GetAllTodos())
 	router.Delete("/{todoID}", handler.DeleteTodo())
 	router.Post("/", handler.CreateTodo())
