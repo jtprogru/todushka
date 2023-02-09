@@ -14,7 +14,6 @@ func (h *Handler) GetTodo() http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		todoId, err := strconv.Atoi(chi.URLParam(r, "todoID"))
 		msg := make(map[string]any)
-		msg["status"] = http.StatusOK
 
 		if err != nil {
 			msg["result"] = "url parameter todoID is not number"
@@ -32,6 +31,8 @@ func (h *Handler) GetTodo() http.HandlerFunc {
 			return
 		}
 		msg["result"] = todo
+		msg["status"] = http.StatusOK
+		w.WriteHeader(http.StatusOK)
 		w.Write(pkg.AnyToJson(msg))
 	}
 }
@@ -39,11 +40,18 @@ func (h *Handler) GetTodo() http.HandlerFunc {
 func (h *Handler) GetAllTodos() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		msg := make(map[string]any)
+
 		todos, err := h.srv.GetAllTodos(r.Context())
 		if err != nil {
+			msg["result"] = fmt.Sprintf("todo internal err: %v", err)
+			msg["status"] = http.StatusInternalServerError
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write(pkg.AnyToJson(err.Error()))
+			w.Write(pkg.AnyToJson(msg))
 		}
-		w.Write(pkg.AnyToJson(todos))
+		msg["result"] = todos
+		msg["status"] = http.StatusOK
+		w.WriteHeader(http.StatusOK)
+		w.Write(pkg.AnyToJson(msg))
 	}
 }

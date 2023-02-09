@@ -29,7 +29,7 @@ func New(c *config.ServerConfig, svc todo.Service) *Api {
 	})
 
 	r.Use(httplog.RequestLogger(logger))
-	r.Use(middleware.Heartbeat("/ping"))
+	r.Use(middleware.SetHeader("Content-Type", "application/json"))
 
 	// A good base middleware stack
 	r.Use(

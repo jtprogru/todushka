@@ -34,3 +34,20 @@ func (s *storage) DeleteTodo(ctx context.Context, todoId int) error {
 	}
 	return nil
 }
+
+func (s *storage) CreateTodo(ctx context.Context, todo entity.TodoCreate) (entity.Todo, error) {
+	query := `insert into todo_items (summary, description) values ($1, $2) returning id;`
+	var todoID int
+	err := s.db.QueryRow(query, todo.Summary, todo.Description).Scan(&todoID)
+	if err != nil {
+		return entity.Todo{}, err
+	}
+	resp := entity.Todo{
+		Id:          todoID,
+		Summary:     todo.Summary,
+		Description: todo.Description,
+		IsDone:      false,
+	}
+
+	return resp, nil
+}
