@@ -6,24 +6,20 @@ import (
 
 	chi "github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/jmoiron/sqlx"
 	"github.com/jtprogru/todushka/internal/config"
-	"github.com/jtprogru/todushka/models/list"
-	"github.com/jtprogru/todushka/models/project"
-	"github.com/jtprogru/todushka/models/todo"
+	"github.com/jtprogru/todushka/internal/controller/rest/todo"
 )
 
 type Api struct {
 	cfg *config.ServerConfig
 	R   *chi.Mux
-	s   *sqlx.DB
 }
 
 func (a *Api) Start() {
 	log.Fatalln(http.ListenAndServe(a.cfg.Addr, a.R))
 }
 
-func New(c *config.ServerConfig, s *sqlx.DB) *Api {
+func New(c *config.ServerConfig, svc todo.Service) *Api {
 	r := chi.NewRouter()
 	// A good base middleware stack
 	r.Use(
@@ -35,14 +31,13 @@ func New(c *config.ServerConfig, s *sqlx.DB) *Api {
 	)
 
 	r.Route("/v1", func(r chi.Router) {
-		r.Mount("/api/todo", todo.Routes())
-		r.Mount("/api/list", list.Routes())
-		r.Mount("/api/project", project.Routes())
+		r.Mount("/api/todo", todo.Routes(svc))
+		// r.Mount("/api/list", list.Routes())
+		// r.Mount("/api/project", project.Routes())
 	})
 
 	return &Api{
 		cfg: c,
 		R:   r,
-		s:   s,
 	}
 }
