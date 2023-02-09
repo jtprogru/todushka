@@ -6,9 +6,6 @@ import (
 	"github.com/jtprogru/todushka/internal/domain/entity"
 )
 
-// Методы, которые из REST API позволяют обратиться за чем либо
-// т.е. бизнес-логика
-
 type Repository interface {
 	GetByID(ctx context.Context, todoID int) (entity.Todo, error)
 	GetAllTodos(ctx context.Context) ([]entity.Todo, error)

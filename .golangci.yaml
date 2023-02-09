@@ -3,8 +3,8 @@ run:
   timeout: 5m
   issues-exit-code: 2
   tests: false
-  modules-download-mode: vendor
-  allow-parallel-runners: true
+  modules-download-mode: readonly
+  allow-parallel-runners: false
   skip-dirs:
     - vendor
 
@@ -12,27 +12,75 @@ linters:
    disable-all: true
    enable:
     - errcheck
-    # - exportloopref
-    # - depguard
-    # - gocritic
-    # - gofumpt
+    - exportloopref
+    - depguard
+    - gocritic
+    - gofumpt
     - goimports
-    # - revive
-    # - gosimple
-    # - govet
-    # - ineffassign
+    - revive
+    - gosimple
+    - govet
+    - ineffassign
     - lll
-    # - misspell
-    # - staticcheck
+    - misspell
+    - staticcheck
     - stylecheck
-    # - typecheck
-    # - unconvert
-    # - unparam
-    # - unused
-    # - gci
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - gci
    fast: false
 
 linters-settings:
   lll:
     line-length: 120
     tab-width: 4
+  revive:
+    rules:
+      # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#argument-limit
+      - name: argument-limit
+        severity: warning
+        disabled: false
+        arguments: [4]
+      # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#atomic
+      - name: atomic
+        severity: warning
+        disabled: false
+      # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#blank-imports
+      - name: blank-imports
+        severity: warning
+        disabled: true
+      # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#datarace
+      - name: datarace
+        severity: warning
+        disabled: false
+      # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#duplicated-imports
+      - name: duplicated-imports
+        severity: warning
+        disabled: false
+      # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#empty-lines
+      - name: empty-lines
+        severity: warning
+        disabled: false
+      # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#function-result-limit
+      - name: function-result-limit
+        severity: warning
+        disabled: false
+        arguments: [2]
+      # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#import-shadowing
+      - name: import-shadowing
+        severity: warning
+        disabled: false
+      # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#nested-structs
+      - name: nested-structs
+        severity: warning
+        disabled: false
+      # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#optimize-operands-order
+      - name: optimize-operands-order
+        severity: warning
+        disabled: false
+      # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#package-comments
+      - name: package-comments
+        severity: warning
+        disabled: false
