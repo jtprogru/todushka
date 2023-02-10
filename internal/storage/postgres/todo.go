@@ -6,7 +6,7 @@ import (
 	"github.com/jtprogru/todushka/internal/domain/entity"
 )
 
-func (s *storage) GetByID(ctx context.Context, todoID int) (entity.Todo, error) {
+func (s *storage) GetTodoByID(ctx context.Context, todoID int) (entity.Todo, error) {
 	query := `select id, summary, description, is_done from todo_items where id=$1;`
 	var todo entity.Todo
 	err := s.db.Get(&todo, query, todoID)

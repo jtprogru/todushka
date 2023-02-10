@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/httplog"
 	"github.com/jtprogru/todushka/internal/config"
+	"github.com/jtprogru/todushka/internal/controller/rest/project"
 	"github.com/jtprogru/todushka/internal/controller/rest/todo"
 )
 
@@ -20,7 +21,7 @@ func (a *API) Start() {
 	log.Fatalln(http.ListenAndServe(a.cfg.Addr, a.R))
 }
 
-func New(c *config.ServerConfig, svc todo.Service) *API {
+func New(c *config.ServerConfig, svct todo.Service, svcp project.Service) *API {
 	r := chi.NewRouter()
 	// Logger
 	logger := httplog.NewLogger("todushka", httplog.Options{
@@ -40,7 +41,8 @@ func New(c *config.ServerConfig, svc todo.Service) *API {
 	)
 
 	r.Route("/v1", func(r chi.Router) {
-		r.Mount("/api/todo", todo.Routes(svc))
+		r.Mount("/api/todo", todo.Routes(svct))
+		r.Mount("/api/project", project.Routes(svcp))
 	})
 
 	return &API{

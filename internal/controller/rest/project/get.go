@@ -1,4 +1,4 @@
-package todo
+package project
 
 import (
 	"fmt"
@@ -9,47 +9,47 @@ import (
 	"github.com/jtprogru/todushka/internal/pkg"
 )
 
-func (h *Handler) GetTodo() http.HandlerFunc {
+func (h *Handler) GetProject() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		todoID, err := strconv.Atoi(chi.URLParam(r, "todoID"))
+		projectID, err := strconv.Atoi(chi.URLParam(r, "projectID"))
 		msg := make(map[string]any)
 
 		if err != nil {
-			msg["result"] = "url parameter todoID is not number"
+			msg["result"] = "url parameter projectID is not number"
 			msg["status"] = http.StatusBadRequest
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = w.Write(pkg.AnyToJSON(msg))
 			return
 		}
-		todo, err := h.srv.GetTodoByID(r.Context(), todoID)
+		project, err := h.srv.GetProjectByID(r.Context(), projectID)
 		if err != nil {
-			msg["result"] = fmt.Sprintf("todo with id=%v not found", todoID)
+			msg["result"] = fmt.Sprintf("project with id=%v not found", projectID)
 			msg["status"] = http.StatusNotFound
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = w.Write(pkg.AnyToJSON(msg))
 			return
 		}
-		msg["result"] = todo
+		msg["result"] = project
 		msg["status"] = http.StatusOK
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(pkg.AnyToJSON(msg))
 	}
 }
 
-func (h *Handler) GetAllTodos() http.HandlerFunc {
+func (h *Handler) GetAllProjects() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		msg := make(map[string]any)
 
-		todos, err := h.srv.GetAllTodos(r.Context())
+		projects, err := h.srv.GetAllProjects(r.Context())
 		if err != nil {
-			msg["result"] = fmt.Sprintf("todo internal err: %v", err)
+			msg["result"] = fmt.Sprintf("project internal err: %v", err)
 			msg["status"] = http.StatusInternalServerError
 			w.WriteHeader(http.StatusInternalServerError)
 			_, _ = w.Write(pkg.AnyToJSON(msg))
 		}
-		msg["result"] = todos
+		msg["result"] = projects
 		msg["status"] = http.StatusOK
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(pkg.AnyToJSON(msg))
