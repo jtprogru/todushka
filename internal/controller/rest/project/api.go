@@ -30,9 +30,9 @@ func Routes(srv Service) *chi.Mux {
 	handler := New(srv)
 
 	router.Get("/{projectID}", handler.GetProject())
-	// router.Put("/{projectID}", handler.UpdateProject())
+	router.Put("/{projectID}", handler.UpdateProject())
 	router.Get("/", handler.GetAllProjects())
-	// router.Delete("/{projectID}", handler.DeleteProject())
-	// router.Post("/", handler.CreateProject())
+	router.Delete("/{projectID}", handler.DeleteProject())
+	router.Post("/", handler.CreateProject())
 	return router
 }
