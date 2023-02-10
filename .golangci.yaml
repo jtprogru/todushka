@@ -9,8 +9,8 @@ run:
     - vendor
 
 linters:
-   disable-all: true
-   enable:
+  disable-all: true
+  enable:
     - errcheck
     - exportloopref
     - depguard
@@ -30,11 +30,11 @@ linters:
     - unparam
     - unused
     - gci
-   fast: false
+  fast: false
 
 linters-settings:
   lll:
-    line-length: 120
+    line-length: 130
     tab-width: 4
   revive:
     rules:

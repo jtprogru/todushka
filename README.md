@@ -10,6 +10,7 @@
 ---
 server:
   addr: ":8082"
+  log_level: "trace"
 
 db:
   host: "127.0.0.1"

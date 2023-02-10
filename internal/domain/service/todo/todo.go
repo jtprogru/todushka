@@ -7,7 +7,7 @@ import (
 )
 
 type Repository interface {
-	GetByID(ctx context.Context, todoID int) (entity.Todo, error)
+	GetTodoByID(ctx context.Context, todoID int) (entity.Todo, error)
 	GetAllTodos(ctx context.Context) ([]entity.Todo, error)
 	DeleteTodo(ctx context.Context, todoID int) error
 	CreateTodo(ctx context.Context, todo entity.TodoCreate) (entity.Todo, error)
@@ -24,8 +24,8 @@ func New(repo Repository) *srv {
 	}
 }
 
-func (s *srv) GetByID(ctx context.Context, todoID int) (entity.Todo, error) {
-	todo, err := s.repo.GetByID(ctx, todoID)
+func (s *srv) GetTodoByID(ctx context.Context, todoID int) (entity.Todo, error) {
+	todo, err := s.repo.GetTodoByID(ctx, todoID)
 	if err != nil {
 		return entity.Todo{}, err
 	}

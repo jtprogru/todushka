@@ -8,7 +8,7 @@ import (
 )
 
 type Service interface {
-	GetByID(ctx context.Context, todoID int) (entity.Todo, error)
+	GetTodoByID(ctx context.Context, todoID int) (entity.Todo, error)
 	GetAllTodos(ctx context.Context) ([]entity.Todo, error)
 	DeleteTodo(ctx context.Context, todoID int) error
 	CreateTodo(ctx context.Context, todo entity.TodoCreate) (entity.Todo, error)
