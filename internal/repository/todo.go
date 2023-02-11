@@ -15,41 +15,21 @@ type StorageTodo interface {
 }
 
 func (r *repo) GetTodoByID(ctx context.Context, todoID int) (entity.Todo, error) {
-	todo, err := r.st.GetTodoByID(ctx, todoID)
-	if err != nil {
-		return entity.Todo{}, err
-	}
-	return todo, nil
+	return r.st.GetTodoByID(ctx, todoID)
 }
 
 func (r *repo) GetAllTodos(ctx context.Context) ([]entity.Todo, error) {
-	todos, err := r.st.GetAllTodos(ctx)
-	if err != nil {
-		return []entity.Todo{}, err
-	}
-	return todos, nil
+	return r.st.GetAllTodos(ctx)
 }
 
 func (r *repo) DeleteTodo(ctx context.Context, todoID int) error {
-	err := r.st.DeleteTodo(ctx, todoID)
-	if err != nil {
-		return err
-	}
-	return nil
+	return r.st.DeleteTodo(ctx, todoID)
 }
 
 func (r *repo) CreateTodo(ctx context.Context, todo entity.TodoCreate) (entity.Todo, error) {
-	t, err := r.st.CreateTodo(ctx, todo)
-	if err != nil {
-		return entity.Todo{}, err
-	}
-	return t, nil
+	return r.st.CreateTodo(ctx, todo)
 }
 
 func (r *repo) UpdateTodo(ctx context.Context, todoID int, todo entity.TodoUpdate) (entity.Todo, error) {
-	t, err := r.st.UpdateTodo(ctx, todoID, todo)
-	if err != nil {
-		return entity.Todo{}, err
-	}
-	return t, nil
+	return r.st.UpdateTodo(ctx, todoID, todo)
 }

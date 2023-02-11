@@ -15,41 +15,21 @@ type StorageProject interface {
 }
 
 func (r *repo) GetProjectByID(ctx context.Context, projectID int) (entity.Project, error) {
-	project, err := r.sp.GetProjectByID(ctx, projectID)
-	if err != nil {
-		return entity.Project{}, err
-	}
-	return project, nil
+	return r.sp.GetProjectByID(ctx, projectID)
 }
 
 func (r *repo) GetAllProjects(ctx context.Context) ([]entity.Project, error) {
-	projects, err := r.sp.GetAllProjects(ctx)
-	if err != nil {
-		return []entity.Project{}, err
-	}
-	return projects, nil
+	return r.sp.GetAllProjects(ctx)
 }
 
 func (r *repo) DeleteProject(ctx context.Context, projectID int) error {
-	err := r.sp.DeleteProject(ctx, projectID)
-	if err != nil {
-		return err
-	}
-	return nil
+	return r.sp.DeleteProject(ctx, projectID)
 }
 
 func (r *repo) CreateProject(ctx context.Context, project entity.ProjectCreate) (entity.Project, error) {
-	t, err := r.sp.CreateProject(ctx, project)
-	if err != nil {
-		return entity.Project{}, err
-	}
-	return t, nil
+	return r.sp.CreateProject(ctx, project)
 }
 
 func (r *repo) UpdateProject(ctx context.Context, projectID int, project entity.ProjectUpdate) (entity.Project, error) {
-	t, err := r.sp.UpdateProject(ctx, projectID, project)
-	if err != nil {
-		return entity.Project{}, err
-	}
-	return t, nil
+	return r.sp.UpdateProject(ctx, projectID, project)
 }

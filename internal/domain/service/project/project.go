@@ -25,41 +25,21 @@ func New(repo Repository) *srv {
 }
 
 func (s *srv) GetProjectByID(ctx context.Context, projectID int) (entity.Project, error) {
-	project, err := s.repo.GetProjectByID(ctx, projectID)
-	if err != nil {
-		return entity.Project{}, err
-	}
-	return project, nil
+	return s.repo.GetProjectByID(ctx, projectID)
 }
 
 func (s *srv) GetAllProjects(ctx context.Context) ([]entity.Project, error) {
-	projects, err := s.repo.GetAllProjects(ctx)
-	if err != nil {
-		return []entity.Project{}, err
-	}
-	return projects, nil
+	return s.repo.GetAllProjects(ctx)
 }
 
 func (s *srv) DeleteProject(ctx context.Context, projectID int) error {
-	err := s.repo.DeleteProject(ctx, projectID)
-	if err != nil {
-		return err
-	}
-	return nil
+	return s.repo.DeleteProject(ctx, projectID)
 }
 
 func (s *srv) CreateProject(ctx context.Context, project entity.ProjectCreate) (entity.Project, error) {
-	t, err := s.repo.CreateProject(ctx, project)
-	if err != nil {
-		return entity.Project{}, err
-	}
-	return t, nil
+	return s.repo.CreateProject(ctx, project)
 }
 
 func (s *srv) UpdateProject(ctx context.Context, projectID int, project entity.ProjectUpdate) (entity.Project, error) {
-	t, err := s.repo.UpdateProject(ctx, projectID, project)
-	if err != nil {
-		return entity.Project{}, err
-	}
-	return t, nil
+	return s.repo.UpdateProject(ctx, projectID, project)
 }
