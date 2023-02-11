@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	chi "github.com/go-chi/chi/v5"
-	"github.com/jtprogru/todushka/internal/pkg"
+	"github.com/jtprogru/todushka/internal/pkg/utils"
 )
 
 func (h *Handler) DeleteTodo() http.HandlerFunc {
@@ -18,14 +18,14 @@ func (h *Handler) DeleteTodo() http.HandlerFunc {
 			msg["status"] = http.StatusBadRequest
 			msg["result"] = fmt.Sprintf("todo bad request: %v", err.Error())
 			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write(pkg.AnyToJSON(msg))
+			_, _ = w.Write(utils.AnyToJSON(msg))
 			return
 		}
 
 		err = h.srv.DeleteTodo(r.Context(), todoID)
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write(pkg.AnyToJSON(msg))
+			_, _ = w.Write(utils.AnyToJSON(msg))
 		}
 
 		w.WriteHeader(http.StatusNoContent)

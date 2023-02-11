@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/jtprogru/todushka/internal/domain/entity"
-	"github.com/jtprogru/todushka/internal/pkg"
+	"github.com/jtprogru/todushka/internal/pkg/utils"
 )
 
 func (h *Handler) CreateTodo() http.HandlerFunc {
@@ -18,7 +18,7 @@ func (h *Handler) CreateTodo() http.HandlerFunc {
 			msg["result"] = fmt.Sprintf("todo bad request: %v", err.Error())
 			msg["status"] = http.StatusBadRequest
 			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write(pkg.AnyToJSON(msg))
+			_, _ = w.Write(utils.AnyToJSON(msg))
 			return
 		}
 
@@ -27,11 +27,11 @@ func (h *Handler) CreateTodo() http.HandlerFunc {
 			msg["result"] = fmt.Sprintf("todo can't create with err: %v", err.Error())
 			msg["status"] = http.StatusInternalServerError
 			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = w.Write(pkg.AnyToJSON(msg))
+			_, _ = w.Write(utils.AnyToJSON(msg))
 			return
 		}
 		msg["result"] = todo
 		msg["status"] = http.StatusCreated
-		_, _ = w.Write(pkg.AnyToJSON(msg))
+		_, _ = w.Write(utils.AnyToJSON(msg))
 	}
 }

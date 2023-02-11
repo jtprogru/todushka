@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	chi "github.com/go-chi/chi/v5"
-	"github.com/jtprogru/todushka/internal/pkg"
+	"github.com/jtprogru/todushka/internal/pkg/utils"
 )
 
 func (h *Handler) GetProject() http.HandlerFunc {
@@ -19,7 +19,7 @@ func (h *Handler) GetProject() http.HandlerFunc {
 			msg["result"] = "url parameter projectID is not number"
 			msg["status"] = http.StatusBadRequest
 			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write(pkg.AnyToJSON(msg))
+			_, _ = w.Write(utils.AnyToJSON(msg))
 			return
 		}
 		project, err := h.srv.GetProjectByID(r.Context(), projectID)
@@ -27,13 +27,13 @@ func (h *Handler) GetProject() http.HandlerFunc {
 			msg["result"] = fmt.Sprintf("project with id=%v not found", projectID)
 			msg["status"] = http.StatusNotFound
 			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write(pkg.AnyToJSON(msg))
+			_, _ = w.Write(utils.AnyToJSON(msg))
 			return
 		}
 		msg["result"] = project
 		msg["status"] = http.StatusOK
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(pkg.AnyToJSON(msg))
+		_, _ = w.Write(utils.AnyToJSON(msg))
 	}
 }
 
@@ -47,11 +47,11 @@ func (h *Handler) GetAllProjects() http.HandlerFunc {
 			msg["result"] = fmt.Sprintf("project internal err: %v", err)
 			msg["status"] = http.StatusInternalServerError
 			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = w.Write(pkg.AnyToJSON(msg))
+			_, _ = w.Write(utils.AnyToJSON(msg))
 		}
 		msg["result"] = projects
 		msg["status"] = http.StatusOK
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(pkg.AnyToJSON(msg))
+		_, _ = w.Write(utils.AnyToJSON(msg))
 	}
 }
