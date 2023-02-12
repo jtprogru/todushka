@@ -1,10 +1,10 @@
 # todushka
 
-Максимально простой проект, главной целью которого является отработка навыка написания кода.
+The simplest possible project, the main goal of which is to develop the skill of writing code.
 
-Подробности смотреть в [Wiki](https://github.com/jtprogru/todushka/wiki) проекта.
+For details, see the [Wiki](https://github.com/jtprogru/todushka/wiki) of the project.
 
-Конфигурационный файл ищется по пути `$HOME/.todushka/config.yaml`. Пример конфига:
+By default, the configuration file is searched by the path `$HOME/.todushka/config.yaml`. Config example:
 
 ```yaml
 ---
@@ -20,3 +20,7 @@ db:
   db_name: "todushka"
   ssl_mode: "disable"
 ```
+
+## License
+
+[WTFPL](http://www.wtfpl.net)
