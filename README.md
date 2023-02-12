@@ -4,6 +4,8 @@ The simplest possible project, the main goal of which is to develop the skill of
 
 For details, see the [Wiki](https://github.com/jtprogru/todushka/wiki) of the project.
 
+## Getting started
+
 By default, the configuration file is searched by the path `$HOME/.todushka/config.yaml`. Config example:
 
 ```yaml
@@ -19,6 +21,26 @@ db:
   password: "postgres"
   db_name: "todushka"
   ssl_mode: "disable"
+```
+
+Run and initialize PostgreSQL in Docker:
+
+```shell
+docker compose up -d
+```
+
+Run application:
+
+```shell
+make run
+```
+
+For more details see:
+
+```shell
+make
+# or
+make help
 ```
 
 ## License

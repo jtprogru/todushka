@@ -1,10 +1,10 @@
 -- Drop all created tables
 
-DROP TABLE todo_items;
-DROP TABLE project_items;
+DROP TABLE IF EXISTS todo_items;
+DROP TABLE IF EXISTS project_items;
 
 -- Create all tables
-CREATE TABLE project_items
+CREATE TABLE IF NOT EXISTS project_items
 (
     id          serial not null unique,
     summary     varchar(255) not null,
@@ -12,20 +12,12 @@ CREATE TABLE project_items
     is_done     boolean not null default false
 );
 
-CREATE TABLE todos_projects (
-  todo_id integer,
-  project_id integer,
-  PRIMARY KEY (todo_id, project_id)
-  CONSTRAINT fk_todo FOREIGN KEY(todo_id) REFERENCES todo_items(id)
-  CONSTRAINT fk_project FOREIGN KEY(project_id) REFERENCES project_items(id)
-);
-
 INSERT INTO project_items (summary, description, is_done)
 VALUES
     ('Project 1', 'Project 1 Hello fkn world', false),
-    ('Project 2', 'Project 2 Hello fkn world', false),
+    ('Project 2', 'Project 2 Hello fkn world', false);
 
-CREATE TABLE todo_items
+CREATE TABLE IF NOT EXISTS todo_items
 (
     id          serial       not null unique,
     summary     varchar(255) not null,

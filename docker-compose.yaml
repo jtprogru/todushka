@@ -6,6 +6,7 @@ services:
     image: postgres:latest
     volumes:
     - pg_data:/var/lib/postgresql/data
+    - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     environment:
       - POSTGRES_DB=todushka
       - POSTGRES_PASSWORD=postgres
