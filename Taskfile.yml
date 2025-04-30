@@ -1,0 +1,99 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+---
+version: "3"
+
+vars:
+  HOME:
+    sh: echo $HOME
+  BINARY_NAME: todushka
+  GOPATH:
+    sh: echo $GOPATH
+
+tasks:
+  default:
+    cmds:
+      - task --list
+    silent: true
+
+  run:cmd:
+    desc: Run as go run main.go
+    cmds:
+      - "go run main.go {{ .CLI_ARGS }}"
+
+  run:bin:
+    desc: Run as binary
+    deps:
+      - build:bin
+    cmds:
+      - "./dist/{{ .BINARY_NAME }} {{ .CLI_ARGS }}"
+
+  tidy:
+    desc: Install all requirements
+    preconditions:
+      - test -f go.mod
+    cmds:
+      - "go mod tidy"
+
+  build:bin:
+    desc: Build bin file from go
+    preconditions:
+      - test -f main.go
+    cmds:
+      - "go mod download"
+      - "CGO_ENABLED=0 go build -o ./dist/{{ .BINARY_NAME }} main.go"
+
+  fmt:
+    desc: Run go fmt
+    cmds:
+      - "gofmt -s -w ."
+      - "goimports -format-only -d -l -v -w ."
+
+  vet:
+    desc: Run go vet ./...
+    cmds:
+      - "go vet ./..."
+
+  test:
+    desc: Run all test
+    cmds:
+      - "go test -coverprofile=cover.out -v ./..."
+      - task test:race
+      - task test:coverage
+
+  test:short:
+    desc: Run short test
+    cmds:
+      - "go test --short -coverprofile=cover.out -v ./..."
+
+  test:coverage:
+    desc: Run test coverage
+    cmds:
+      - "go tool cover -func=cover.out"
+
+  test:race:
+    desc: Run tests with race
+    cmds:
+      - "go test -race -v ./..."
+
+  test:watch:
+    desc: Run tests with watchexec
+    cmds:
+      - 'watchexec -c clear -o do-nothing -d 100ms --exts go ''pkg=".${WATCHEXEC_COMMON_PATH/$PWD/}/..."; echo "running tests for $pkg"; go test "$pkg"'''
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - "golangci-lint -v run"
+
+  install:global:
+    desc: Build and install globally
+    cmds:
+      - "go install"
+
+  install:dev:
+    desc: Build bin file from go and install to
+    preconditions:
+      - test -f main.go
+    cmds:
+      - "go mod download"
+      - "CGO_ENABLED=0 go build -o {{ .GOPATH }}/bin/{{ .BINARY_NAME }} main.go"
