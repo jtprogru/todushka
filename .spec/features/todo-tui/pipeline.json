@@ -1,0 +1,21 @@
+{
+  "feature": "todo-tui",
+  "phase": "done",
+  "created_at": "2026-05-24T20:54:44Z",
+  "current_artifact": null,
+  "history": [
+    {"phase": "explore", "artifact": "/Users/jtprogru/Work/github/jtprogru/todushka/.spec/features/todo-tui/explore.md", "approved_at": "2026-05-24T21:00:36Z"},
+    {"phase": "requirements", "artifact": "/Users/jtprogru/Work/github/jtprogru/todushka/.spec/features/todo-tui/requirements.md", "approved_at": "2026-05-24T21:07:45Z"},
+    {"phase": "design", "artifact": "/Users/jtprogru/Work/github/jtprogru/todushka/.spec/features/todo-tui/design.md", "approved_at": "2026-05-24T21:16:55Z"},
+    {"phase": "task-plan", "artifact": "/Users/jtprogru/Work/github/jtprogru/todushka/.spec/features/todo-tui/task-plan.md", "approved_at": "2026-05-24T21:23:55Z"},
+    {"phase": "implementation", "artifact": "/Users/jtprogru/Work/github/jtprogru/todushka/.spec/features/todo-tui/implementation.md", "approved_at": "2026-05-24T22:10:24Z"},
+    {"phase": "review", "artifact": "/Users/jtprogru/Work/github/jtprogru/todushka/.spec/features/todo-tui/review.md", "approved_at": "2026-05-24T22:22:19Z"}
+  ],
+  "review_base_commit": "5ff81478986b35b74aaa0ecacb2de2218f7cd77f",
+  "branch": null,
+  "worktree": null,
+  "last_completed_task": null,
+  "finish_action": "keep",
+  "finished_at": "2026-05-24T22:22:30Z",
+  "finish_base": null
+}
