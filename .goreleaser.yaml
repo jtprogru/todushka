@@ -1,0 +1,116 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: todushka
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: todushka
+    main: ./cmd/todushka
+    binary: todushka
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/jtprogru/todushka/internal/version.Version={{.Version}}
+      - -X github.com/jtprogru/todushka/internal/version.Commit={{.Commit}}
+      - -X github.com/jtprogru/todushka/internal/version.Date={{.Date}}
+      - -X github.com/jtprogru/todushka/internal/version.BuiltBy=goreleaser
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+sboms:
+  - id: archive-sbom
+    artifacts: archive
+    documents:
+      - "${artifact}.sbom.json"
+
+signs:
+  - id: cosign-checksum
+    cmd: cosign
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--yes"
+      - "--output-certificate=${certificate}"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+    artifacts: checksum
+    output: true
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Others
+      order: 999
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+      - "Merge branch"
+
+release:
+  github:
+    owner: jtprogru
+    name: todushka
+  draft: false
+  prerelease: auto
+
+homebrew_casks:
+  - name: todushka
+    repository:
+      owner: jtprogru
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/jtprogru/todushka"
+    description: "Terminal Things 3: a keyboard-first TUI todo manager with Inbox / Today / Upcoming workflow and embedded local store"
+    license: "MIT"
+    url:
+      verified: "github.com/jtprogru/todushka"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "chore(todushka): bring cask to {{ .Tag }}"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/todushka"]
+          end
