@@ -15,7 +15,7 @@
   "branch": "feature/dual-pane-layout",
   "worktree": null,
   "last_completed_task": null,
-  "finish_action": null,
-  "finished_at": null,
-  "finish_base": null
+  "finish_action": "merge",
+  "finished_at": "2026-05-25T13:37:32Z",
+  "finish_base": "main"
 }
