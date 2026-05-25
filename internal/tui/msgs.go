@@ -76,3 +76,8 @@ type nameCacheLoadedMsg struct {
 	projects map[id.ID]string
 	headings map[id.ID]string
 }
+
+// countsLoadedMsg carries per-list task counts after fetchListCounts Cmd.
+type countsLoadedMsg struct {
+	counts map[listKind]int
+}

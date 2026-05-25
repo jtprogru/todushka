@@ -14,6 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/jtprogru/todushka/internal/app"
+	"github.com/jtprogru/todushka/internal/config"
 	"github.com/jtprogru/todushka/internal/domain/id"
 	"github.com/jtprogru/todushka/internal/domain/task"
 )
@@ -43,13 +44,17 @@ type Model struct {
 	areaNamesByID    map[id.ID]string
 	projectNamesByID map[id.ID]string
 	headingNamesByID map[id.ID]string
+
+	height     int
+	config     config.AppConfig
+	listCounts map[listKind]int
 }
 
 // allLists is the canonical order used by Tab/Shift+Tab cycling and the header.
 var allLists = []listKind{listInbox, listToday, listUpcoming, listAnytime, listSomeday, listLogbook}
 
 // NewModel constructs the root TUI model.
-func NewModel(svc *app.Service, theme Theme) Model {
+func NewModel(svc *app.Service, theme Theme, cfg config.AppConfig) Model {
 	ti := textinput.New()
 	ti.Placeholder = "what to do? — tokens: #tag @today @project !YYYY-MM-DD"
 	ti.CharLimit = 256
@@ -65,6 +70,8 @@ func NewModel(svc *app.Service, theme Theme) Model {
 		areaNamesByID:    make(map[id.ID]string),
 		projectNamesByID: make(map[id.ID]string),
 		headingNamesByID: make(map[id.ID]string),
+		config:           cfg,
+		listCounts:       make(map[listKind]int),
 	}
 }
 
@@ -74,6 +81,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
+		m.height = msg.Height
 		return m, nil
 
 	case tasksLoadedMsg:
@@ -81,7 +89,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cursor >= len(m.tasks) {
 			m.cursor = max(0, len(m.tasks)-1)
 		}
-		return m, fetchNameCache(m.service, m.tasks)
+		return m, tea.Batch(
+			fetchNameCache(m.service, m.tasks),
+			fetchListCounts(m.service),
+		)
+
+	case countsLoadedMsg:
+		m.listCounts = msg.counts
+		return m, nil
 
 	case nameCacheLoadedMsg:
 		for k, v := range msg.tags {
@@ -444,7 +459,7 @@ func (m Model) viewBody() string {
 	if !isDualPane(m) {
 		return m.viewList()
 	}
-	listW, detailsW := paneWidths(m.width)
+	listW, detailsW := paneWidths(m)
 	left := lipgloss.NewStyle().Width(listW).Render(m.viewList())
 	right := lipgloss.NewStyle().
 		Width(detailsW).
@@ -456,21 +471,36 @@ func (m Model) viewBody() string {
 }
 
 func (m Model) View() string {
-	if m.confirm != nil {
-		modal := m.theme.Modal.Render(fmt.Sprintf("%s %d tasks? (y/n)", m.confirm.action.label(), len(m.confirm.ids)))
-		body := lipgloss.JoinVertical(lipgloss.Left, m.viewBody(), modal)
+	// Editor takes full body — no clamp.
+	if m.screen == screenEditor {
+		body := m.editor.View(m.theme, m.editorWidth())
 		return lipgloss.JoinVertical(lipgloss.Left, m.viewHeader(), body, m.viewFooter())
 	}
 	var body string
-	switch m.screen {
-	case screenHelp:
-		body = m.viewHelp()
-	case screenQuickEntry:
-		body = lipgloss.JoinVertical(lipgloss.Left, m.viewBody(), m.viewQuickEntry())
-	case screenEditor:
-		body = m.editor.View(m.theme, m.editorWidth())
-	default:
-		body = m.viewBody()
+	if m.confirm != nil {
+		modal := m.theme.Modal.Render(fmt.Sprintf("%s %d tasks? (y/n)", m.confirm.action.label(), len(m.confirm.ids)))
+		body = lipgloss.JoinVertical(lipgloss.Left, m.viewBody(), modal)
+	} else {
+		switch m.screen {
+		case screenHelp:
+			body = m.viewHelp()
+		case screenQuickEntry:
+			body = lipgloss.JoinVertical(lipgloss.Left, m.viewBody(), m.viewQuickEntry())
+		default:
+			body = m.viewBody()
+		}
+	}
+	if m.height >= 10 && m.width >= 40 {
+		header := m.viewHeader()
+		footer := m.viewFooter()
+		headerH := lipgloss.Height(header)
+		footerH := lipgloss.Height(footer)
+		bodyH := m.height - headerH - footerH
+		if bodyH < 0 {
+			bodyH = 0
+		}
+		clampedBody := lipgloss.NewStyle().Height(bodyH).MaxHeight(bodyH).Render(body)
+		return lipgloss.JoinVertical(lipgloss.Left, header, clampedBody, footer)
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, m.viewHeader(), body, m.viewFooter())
 }
@@ -483,18 +513,6 @@ func (m Model) editorWidth() int {
 		return 80
 	}
 	return m.width
-}
-
-func (m Model) viewHeader() string {
-	parts := make([]string, 0, len(allLists))
-	for _, l := range allLists {
-		if l == m.activeList {
-			parts = append(parts, m.theme.Header.Render(l.String()))
-		} else {
-			parts = append(parts, m.theme.HeaderDim.Render(l.String()))
-		}
-	}
-	return strings.Join(parts, "")
 }
 
 func (m Model) viewList() string {
@@ -553,30 +571,6 @@ func (m Model) viewHelp() string {
 		lines = append(lines, "  "+m.theme.Selected.Render(h.Key)+"  "+h.Desc)
 	}
 	return strings.Join(lines, "\n")
-}
-
-func (m Model) viewFooter() string {
-	hints := "?: help  ⇥: next view  /: filter  space: select  n: quick  ↵: edit  c: complete  q: quit"
-	if m.screen == screenEditor {
-		hints = "Tab: field  Ctrl+S: save  Esc: cancel"
-	}
-	if m.filtering {
-		hints = "Filter: " + m.filterQuery + "_  Enter=save  Esc=cancel"
-	}
-	left := m.theme.Help.Render(hints)
-	right := ""
-	if m.statusMsg != "" {
-		right = m.theme.StatusError.Render(m.statusMsg)
-	}
-	if len(m.selected) > 0 {
-		counter := m.theme.Selected.Render(fmt.Sprintf("Selected: %d", len(m.selected)))
-		if right != "" {
-			right = right + "  " + counter
-		} else {
-			right = counter
-		}
-	}
-	return left + "  " + right
 }
 
 func max(a, b int) int {

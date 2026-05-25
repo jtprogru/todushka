@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jtprogru/todushka/internal/app"
+	"github.com/jtprogru/todushka/internal/config"
 	"github.com/jtprogru/todushka/internal/domain/id"
 	"github.com/jtprogru/todushka/internal/storage/fakes"
 	"github.com/stretchr/testify/require"
@@ -32,7 +33,7 @@ func newTestDeps(t *testing.T, env func(string) string) (Deps, *bytes.Buffer, *b
 		Stderr:    stderr,
 		Stdin:     strings.NewReader(""),
 		Env:       env,
-		LaunchTUI: func(_ *app.Service) error { return nil },
+		LaunchTUI: func(_ *app.Service, _ config.AppConfig) error { return nil },
 	}
 	return deps, stdout, stderr
 }
@@ -85,7 +86,7 @@ func TestCLI_CompleteHappyPath(t *testing.T) {
 func TestCLI_NoArgsCallsTUI(t *testing.T) {
 	called := false
 	deps, _, _ := newTestDeps(t, nil)
-	deps.LaunchTUI = func(_ *app.Service) error {
+	deps.LaunchTUI = func(_ *app.Service, _ config.AppConfig) error {
 		called = true
 		return nil
 	}

@@ -10,6 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jtprogru/todushka/internal/app"
+	"github.com/jtprogru/todushka/internal/config"
 	"github.com/jtprogru/todushka/internal/domain/id"
 	"github.com/jtprogru/todushka/internal/domain/task"
 	"github.com/jtprogru/todushka/internal/storage/fakes"
@@ -24,13 +25,13 @@ func (f fixedClock) Now() time.Time { return f.now }
 func newTestModel(t *testing.T) Model {
 	t.Helper()
 	svc := app.New(fakes.New(), fixedClock{now: time.Date(2026, 5, 25, 10, 0, 0, 0, time.UTC)})
-	return NewModel(svc, NewTheme())
+	return NewModel(svc, NewTheme(), config.Defaults())
 }
 
 func newTestModelWithService(t *testing.T) (Model, *app.Service) {
 	t.Helper()
 	svc := app.New(fakes.New(), fixedClock{now: time.Date(2026, 5, 25, 10, 0, 0, 0, time.UTC)})
-	return NewModel(svc, NewTheme()), svc
+	return NewModel(svc, NewTheme(), config.Defaults()), svc
 }
 
 func TestTUI_QuitOnQ(t *testing.T) {
@@ -485,7 +486,7 @@ func TestProp_SwitchListResetsState(t *testing.T) {
 func setupRapidModel(rt *rapid.T, titles ...string) (Model, *app.Service, []task.Task) {
 	rt.Helper()
 	svc := app.New(fakes.New(), fixedClock{now: time.Date(2026, 5, 25, 10, 0, 0, 0, time.UTC)})
-	m := NewModel(svc, NewTheme())
+	m := NewModel(svc, NewTheme(), config.Defaults())
 	ctx := context.Background()
 	tasks := make([]task.Task, 0, len(titles))
 	for _, title := range titles {
@@ -642,7 +643,7 @@ func TestProp_SelectionSubsetOfVisible(t *testing.T) {
 // bareTestModel constructs a Model without any service dependency
 // (sufficient for view-only properties that don't load tasks).
 func bareTestModel() Model {
-	return NewModel(nil, NewTheme())
+	return NewModel(nil, NewTheme(), config.Defaults())
 }
 
 // TestProp_StatusBarShowsCount verifies CP-10 (REQ-2.8): when N tasks
@@ -679,7 +680,9 @@ func TestProp_HelpContainsNewKeys(t *testing.T) {
 }
 
 // TestProp_FooterContainsNewKeys verifies CP-18 (REQ-4.2): the
-// list-mode footer always mentions '/' and 'space'.
+// list-mode footer surfaces mode-appropriate key hints. In NORMAL mode
+// (no selection, not filtering) it advertises '/' and 'space'; in SELECT
+// mode (selection present) it advertises the bulk actions and clear key.
 func TestProp_FooterContainsNewKeys(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		selN := rapid.IntRange(0, 10).Draw(rt, "selN")
@@ -690,8 +693,15 @@ func TestProp_FooterContainsNewKeys(t *testing.T) {
 		m.filtering = false
 		m.confirm = nil
 		out := m.viewFooter()
-		require.Contains(rt, out, "/", "footer must mention the filter key")
-		require.Contains(rt, out, "space", "footer must mention the select key")
+		if selN == 0 {
+			require.Contains(rt, out, "-- NORMAL --", "NORMAL mode chip expected")
+			require.Contains(rt, out, "/: filter", "footer must mention the filter key")
+			require.Contains(rt, out, "space: select", "footer must mention the select key")
+		} else {
+			require.Contains(rt, out, "-- SELECT --", "SELECT mode chip expected")
+			require.Contains(rt, out, "c/x/d/p: bulk", "footer must mention bulk actions")
+			require.Contains(rt, out, "esc: clear", "footer must mention clear key")
+		}
 	})
 }
 
@@ -761,4 +771,12 @@ func TestNameCache_FetchCmdEmitsMsg(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "work", res.areas[a.ID])
 	require.Equal(t, "urgent", res.tags[tg.ID])
+}
+
+func TestWindowSize_BothAxesTracked(t *testing.T) {
+	m := newTestModel(t)
+	m2, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	mm := m2.(Model)
+	require.Equal(t, 120, mm.width)
+	require.Equal(t, 40, mm.height)
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/jtprogru/todushka/internal/app"
+	"github.com/jtprogru/todushka/internal/config"
 )
 
 // Deps is the test seam: callers wire real os streams in production and
@@ -17,7 +18,8 @@ type Deps struct {
 	Stderr    io.Writer
 	Stdin     io.Reader
 	Env       func(string) string
-	LaunchTUI func(*app.Service) error // returns an error to surface to main
+	Config    config.AppConfig                           // resolved at runtime by root PersistentPreRunE
+	LaunchTUI func(*app.Service, config.AppConfig) error // returns an error to surface to main
 }
 
 func DefaultDeps(svc *app.Service) Deps {
@@ -27,5 +29,6 @@ func DefaultDeps(svc *app.Service) Deps {
 		Stderr:  os.Stderr,
 		Stdin:   os.Stdin,
 		Env:     os.Getenv,
+		Config:  config.Defaults(),
 	}
 }

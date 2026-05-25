@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jtprogru/todushka/internal/app"
+	"github.com/jtprogru/todushka/internal/config"
 	"github.com/jtprogru/todushka/internal/domain/id"
 	"github.com/jtprogru/todushka/internal/domain/task"
 	"github.com/stretchr/testify/require"
@@ -179,7 +180,9 @@ func TestIsDualPane_FilteringAllowed(t *testing.T) {
 
 func TestPaneWidths_SumEqualsTotal(t *testing.T) {
 	for _, w := range []int{100, 120, 150, 200, 300} {
-		list, details := paneWidths(w)
+		m := newTestModel(t)
+		m.width = w
+		list, details := paneWidths(m)
 		require.Equal(t, w, list+1+details, "width %d", w)
 	}
 }
@@ -343,7 +346,9 @@ func TestProp_LayoutModeExclusion(t *testing.T) {
 func TestProp_PaneWidthArithmetic(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		w := rapid.IntRange(100, 400).Draw(rt, "width")
-		list, details := paneWidths(w)
+		m := bareTestModel()
+		m.width = w
+		list, details := paneWidths(m)
 		require.Equal(rt, w, list+1+details,
 			"listW(%d) + 1 + detailsW(%d) must equal totalW(%d)", list, details, w)
 		require.GreaterOrEqual(rt, list, 0, "listW must be non-negative")
@@ -355,8 +360,8 @@ func TestProp_PaneWidthArithmetic(t *testing.T) {
 // viewBody contains the double-line vertical border `║`.
 func TestProp_BorderRenders(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Width drawn from values ≥ dualPaneMinWidth so dual-pane is active.
-		w := rapid.IntRange(dualPaneMinWidth, 300).Draw(rt, "width")
+		// Width drawn from values ≥ config.Defaults().DualPaneMinWidth so dual-pane is active.
+		w := rapid.IntRange(config.Defaults().DualPaneMinWidth, 300).Draw(rt, "width")
 		m := bareTestModel()
 		m.width = w
 		m.screen = screenList
@@ -374,7 +379,7 @@ func TestProp_BorderRenders(t *testing.T) {
 func TestProp_EditorHelpForceFullPane(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		screen := rapid.SampledFrom([]screenKind{screenEditor, screenHelp}).Draw(rt, "screen")
-		w := rapid.IntRange(dualPaneMinWidth, 400).Draw(rt, "width")
+		w := rapid.IntRange(config.Defaults().DualPaneMinWidth, 400).Draw(rt, "width")
 		m := bareTestModel()
 		m.width = w
 		m.screen = screen
@@ -494,7 +499,7 @@ func TestProp_NilFieldsOmitted(t *testing.T) {
 }
 
 // TestProp_NotesTruncationCorrect verifies CP-7 (REQ-2.3): notes are
-// wrapped/truncated to at most detailsNotesMaxLines (8) lines, with an
+// wrapped/truncated to at most config.Defaults().NotesMaxLines (8) lines, with an
 // ellipsis line appended iff truncation occurred.
 func TestProp_NotesTruncationCorrect(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
@@ -505,16 +510,16 @@ func TestProp_NotesTruncationCorrect(t *testing.T) {
 			lines[i] = fmt.Sprintf("note line %d", i)
 		}
 		notes := strings.Join(lines, "\n")
-		out := wrapAndTruncate(notes, 60, detailsNotesMaxLines)
+		out := wrapAndTruncate(notes, 60, config.Defaults().NotesMaxLines)
 		outLines := strings.Split(out, "\n")
 
-		if nLines > detailsNotesMaxLines {
-			require.LessOrEqual(rt, len(outLines), detailsNotesMaxLines+1,
+		if nLines > config.Defaults().NotesMaxLines {
+			require.LessOrEqual(rt, len(outLines), config.Defaults().NotesMaxLines+1,
 				"truncated output must be ≤ maxLines+1 lines (got %d for input %d)", len(outLines), nLines)
 			require.Contains(rt, out, "…", "truncated output must contain ellipsis")
 		} else {
 			require.NotContains(rt, out, "…",
-				"non-truncated output (input %d ≤ %d) must NOT contain ellipsis", nLines, detailsNotesMaxLines)
+				"non-truncated output (input %d ≤ %d) must NOT contain ellipsis", nLines, config.Defaults().NotesMaxLines)
 		}
 	})
 }
@@ -708,7 +713,7 @@ func TestProp_CursorChangeReflects(t *testing.T) {
 // the filter query content.
 func TestProp_FilterPreservesDualPane(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		w := rapid.IntRange(dualPaneMinWidth, 300).Draw(rt, "width")
+		w := rapid.IntRange(config.Defaults().DualPaneMinWidth, 300).Draw(rt, "width")
 		query := rapid.StringMatching(`[a-zA-Z0-9 ]{0,10}`).Draw(rt, "query")
 		m := bareTestModel()
 		m.width = w
@@ -726,7 +731,7 @@ func TestProp_FilterPreservesDualPane(t *testing.T) {
 // (below) the border.
 func TestProp_ConfirmStacksBelowDual(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		w := rapid.IntRange(dualPaneMinWidth, 300).Draw(rt, "width")
+		w := rapid.IntRange(config.Defaults().DualPaneMinWidth, 300).Draw(rt, "width")
 		action := rapid.SampledFrom([]bulkAction{
 			bulkActionComplete, bulkActionCancel, bulkActionDelete, bulkActionPin,
 		}).Draw(rt, "action")

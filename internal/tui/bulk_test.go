@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/jtprogru/todushka/internal/config"
 	"github.com/jtprogru/todushka/internal/domain/id"
 	"github.com/jtprogru/todushka/internal/domain/task"
 	"github.com/jtprogru/todushka/internal/storage"
@@ -226,7 +227,7 @@ func TestProp_BulkThresholdGate(t *testing.T) {
 
 		m2, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
 		mm := m2.(Model)
-		if n < bulkConfirmThreshold {
+		if n < config.Defaults().BulkConfirmThreshold {
 			require.Nil(rt, mm.confirm, "below threshold: must NOT open modal")
 			require.NotNil(rt, cmd, "below threshold: must dispatch immediately")
 		} else {

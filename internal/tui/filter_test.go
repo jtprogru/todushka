@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/jtprogru/todushka/internal/config"
 	"github.com/jtprogru/todushka/internal/domain/id"
 	"github.com/jtprogru/todushka/internal/domain/task"
 	"github.com/stretchr/testify/require"
@@ -187,7 +188,7 @@ func TestProp_FilterStateTransitions(t *testing.T) {
 		body := rapid.SliceOfN(rapid.StringMatching(`[a-z]`), 0, 5).Draw(t, "runes")
 		closer := rapid.SampledFrom([]string{"esc", "enter"}).Draw(t, "closer")
 
-		m := NewModel(nil, NewTheme())
+		m := NewModel(nil, NewTheme(), config.Defaults())
 		// Enter filter mode via '/'.
 		m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 		mm := m2.(Model)
@@ -232,7 +233,7 @@ func TestProp_NoMatchesShowsPlaceholder(t *testing.T) {
 			tasks[i] = task.Task{ID: id.New(), Title: ti}
 		}
 		// "~~~" cannot occur in any [a-z] title, so the filter excludes everything.
-		m := NewModel(nil, NewTheme())
+		m := NewModel(nil, NewTheme(), config.Defaults())
 		m.tasks = tasks
 		m.filterQuery = "~~~"
 

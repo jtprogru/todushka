@@ -11,21 +11,14 @@ import (
 	"github.com/jtprogru/todushka/internal/domain/task"
 )
 
-const detailsNotesMaxLines = 8
-
-const (
-	dualPaneMinWidth = 100
-	listPaneShare    = 0.45
-)
-
 // isDualPane reports whether the renderer should use horizontal split.
 // Activated only when:
-//   - terminal width >= dualPaneMinWidth (excludes width==0 initial state)
+//   - terminal width >= m.config.DualPaneMinWidth (excludes width==0 initial state)
 //   - screen is screenList — editor/help force single-pane (REQ-1.6/1.7)
 //
 // Filter mode and quick-entry overlay do NOT disable dual-pane.
 func isDualPane(m Model) bool {
-	if m.width < dualPaneMinWidth {
+	if m.width < m.config.DualPaneMinWidth {
 		return false
 	}
 	if m.screen == screenEditor || m.screen == screenHelp {
@@ -36,10 +29,10 @@ func isDualPane(m Model) bool {
 
 // paneWidths returns (listWidth, detailsWidth) for the dual-pane layout.
 // The 1-column border between panes is allocated separately. Invariant:
-// listWidth + 1 + detailsWidth == totalWidth.
-func paneWidths(totalWidth int) (int, int) {
-	list := int(float64(totalWidth-1) * listPaneShare)
-	details := totalWidth - 1 - list
+// listWidth + 1 + detailsWidth == m.width.
+func paneWidths(m Model) (int, int) {
+	list := int(float64(m.width-1) * m.config.ListPaneShare)
+	details := m.width - 1 - list
 	return list, details
 }
 
@@ -154,7 +147,7 @@ func viewDetails(m Model, width int) string {
 	lines = append(lines, "Status: "+statusLabel(t.Status))
 	if t.Notes != "" {
 		lines = append(lines, "")
-		lines = append(lines, wrapAndTruncate(t.Notes, width, detailsNotesMaxLines))
+		lines = append(lines, wrapAndTruncate(t.Notes, width, m.config.NotesMaxLines))
 	}
 	if t.StartDate != nil {
 		lines = append(lines, "Start:  "+t.StartDate.Format("2006-01-02"))

@@ -19,8 +19,6 @@ const (
 	bulkActionPin
 )
 
-const bulkConfirmThreshold = 5
-
 // confirmState tracks a pending bulk operation awaiting user confirmation.
 type confirmState struct {
 	action bulkAction
@@ -42,14 +40,14 @@ func (a bulkAction) label() string {
 }
 
 // dispatch routes an action key based on |m.selected|. Empty selection falls
-// back to per-cursor; 1..bulkConfirmThreshold-1 runs immediately; >=threshold
-// installs a confirm modal.
+// back to per-cursor; 1..m.config.BulkConfirmThreshold-1 runs immediately;
+// >=threshold installs a confirm modal.
 func dispatch(m Model, action bulkAction) (Model, tea.Cmd) {
 	if len(m.selected) == 0 {
 		return m, perCursorCmd(m, action)
 	}
 	ids := selectionIDs(m)
-	if len(ids) < bulkConfirmThreshold {
+	if len(ids) < m.config.BulkConfirmThreshold {
 		return m, runBulk(m.service, action, ids)
 	}
 	m.confirm = &confirmState{action: action, ids: ids}
