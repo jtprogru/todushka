@@ -1,0 +1,21 @@
+{
+  "feature": "dual-pane-layout",
+  "phase": "done",
+  "created_at": "2026-05-25T12:17:45Z",
+  "current_artifact": null,
+  "history": [
+    {"phase": "explore", "artifact": ".spec/features/dual-pane-layout/explore.md", "approved_at": "2026-05-25T12:20:41Z"},
+    {"phase": "requirements", "artifact": ".spec/features/dual-pane-layout/requirements.md", "approved_at": "2026-05-25T12:27:37Z"},
+    {"phase": "design", "artifact": ".spec/features/dual-pane-layout/design.md", "approved_at": "2026-05-25T12:31:57Z"},
+    {"phase": "task-plan", "artifact": ".spec/features/dual-pane-layout/task-plan.md", "approved_at": "2026-05-25T12:36:25Z"},
+    {"phase": "implementation", "artifact": ".spec/features/dual-pane-layout/implementation.md", "approved_at": "2026-05-25T13:16:29Z"},
+    {"phase": "review", "artifact": ".spec/features/dual-pane-layout/review.md", "approved_at": "2026-05-25T13:36:37Z"}
+  ],
+  "review_base_commit": "71d16ba93eb73b4340bb3298df8da66fd5a57de2",
+  "branch": "feature/dual-pane-layout",
+  "worktree": null,
+  "last_completed_task": null,
+  "finish_action": null,
+  "finished_at": null,
+  "finish_base": null
+}
