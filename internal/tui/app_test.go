@@ -1,15 +1,20 @@
 package tui
 
 import (
+	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jtprogru/todushka/internal/app"
+	"github.com/jtprogru/todushka/internal/domain/id"
 	"github.com/jtprogru/todushka/internal/domain/task"
 	"github.com/jtprogru/todushka/internal/storage/fakes"
 	"github.com/stretchr/testify/require"
+	"pgregory.net/rapid"
 )
 
 type fixedClock struct{ now time.Time }
@@ -203,6 +208,204 @@ func TestTUI_EditorTabCyclesFields(t *testing.T) {
 	require.Equal(t, fieldTitle, mm.editor.focus)
 }
 
+func setupModelWithInboxTasks(t *testing.T, titles ...string) (Model, *app.Service, []task.Task) {
+	t.Helper()
+	m, svc := newTestModelWithService(t)
+	ctx := context.Background()
+	tasks := make([]task.Task, 0, len(titles))
+	for _, title := range titles {
+		tk, err := svc.AddTask(ctx, app.AddTaskInput{Title: title})
+		require.NoError(t, err)
+		tasks = append(tasks, tk)
+	}
+	m.activeList = listInbox
+	m.tasks = tasks
+	m.cursor = 0
+	return m, svc, tasks
+}
+
+func TestTUI_CompleteCursorTaskWhenNoSelection(t *testing.T) {
+	m, svc, tasks := setupModelWithInboxTasks(t, "task one", "task two")
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	require.NotNil(t, cmd)
+	_ = cmd()
+
+	got, err := svc.Repo().TaskGet(context.Background(), tasks[0].ID)
+	require.NoError(t, err)
+	require.Equal(t, task.StatusCompleted, got.Status)
+	require.NotNil(t, got.CompletedAt)
+
+	other, err := svc.Repo().TaskGet(context.Background(), tasks[1].ID)
+	require.NoError(t, err)
+	require.Equal(t, task.StatusOpen, other.Status, "other tasks must remain open")
+}
+
+func TestTUI_CancelCursorTaskWhenNoSelection(t *testing.T) {
+	m, svc, tasks := setupModelWithInboxTasks(t, "task one", "task two")
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	require.NotNil(t, cmd)
+	_ = cmd()
+
+	got, err := svc.Repo().TaskGet(context.Background(), tasks[0].ID)
+	require.NoError(t, err)
+	require.Equal(t, task.StatusCancelled, got.Status)
+	require.NotNil(t, got.CancelledAt)
+
+	other, err := svc.Repo().TaskGet(context.Background(), tasks[1].ID)
+	require.NoError(t, err)
+	require.Equal(t, task.StatusOpen, other.Status)
+}
+
+func TestTUI_DeleteCursorTaskWhenNoSelection(t *testing.T) {
+	m, svc, tasks := setupModelWithInboxTasks(t, "task one", "task two")
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	require.NotNil(t, cmd)
+	_ = cmd()
+
+	inbox, err := svc.ListInbox(context.Background())
+	require.NoError(t, err)
+	require.Len(t, inbox, 1, "deleted task must be filtered out of inbox")
+	require.Equal(t, tasks[1].ID, inbox[0].ID, "remaining task is the one we did not delete")
+}
+
+func TestTUI_PinCursorTaskWhenNoSelection(t *testing.T) {
+	m, svc, tasks := setupModelWithInboxTasks(t, "task one", "task two")
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	require.NotNil(t, cmd)
+	_ = cmd()
+
+	got, err := svc.Repo().TaskGet(context.Background(), tasks[0].ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.PinnedToday, "expected PinnedToday to be set")
+
+	other, err := svc.Repo().TaskGet(context.Background(), tasks[1].ID)
+	require.NoError(t, err)
+	require.Nil(t, other.PinnedToday)
+}
+
+func TestSelection_SpaceToggle(t *testing.T) {
+	m, _, _ := setupModelWithInboxTasks(t, "a", "b")
+
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	mm := m2.(Model)
+	require.Equal(t, 1, len(mm.selected))
+
+	m3, _ := mm.Update(tea.KeyMsg{Type: tea.KeySpace})
+	require.Equal(t, 0, len(m3.(Model).selected))
+}
+
+func TestSelection_StarSelectsAllVisible(t *testing.T) {
+	m, _, tasks := setupModelWithInboxTasks(t, "a", "b", "c")
+
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'*'}})
+	mm := m2.(Model)
+	require.Equal(t, 3, len(mm.selected))
+	for _, tk := range tasks {
+		_, ok := mm.selected[tk.ID]
+		require.True(t, ok, "task ID %v expected in selected", tk.ID)
+	}
+}
+
+func TestSelection_EscClearsSelection(t *testing.T) {
+	m, _, tasks := setupModelWithInboxTasks(t, "a", "b")
+	m.selected[tasks[0].ID] = struct{}{}
+	require.Equal(t, 1, len(m.selected))
+
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	require.Equal(t, 0, len(m2.(Model).selected))
+}
+
+func TestSelection_PrefixHiddenWhenEmpty(t *testing.T) {
+	m, _, _ := setupModelWithInboxTasks(t, "task")
+	require.Equal(t, 0, len(m.selected))
+
+	out := m.viewList()
+	require.NotContains(t, out, "[x]")
+	require.NotContains(t, out, "[ ]")
+}
+
+func TestSelection_PrefixVisibleWhenNonEmpty(t *testing.T) {
+	m, _, tasks := setupModelWithInboxTasks(t, "task one", "task two")
+	m.selected[tasks[0].ID] = struct{}{}
+
+	out := m.viewList()
+	require.Contains(t, out, "[x] ")
+	require.Contains(t, out, "[ ] ")
+}
+
+func TestSelection_StatusBarCounter(t *testing.T) {
+	m, _, tasks := setupModelWithInboxTasks(t, "a", "b", "c")
+	for _, tk := range tasks {
+		m.selected[tk.ID] = struct{}{}
+	}
+
+	out := m.viewFooter()
+	require.Contains(t, out, "Selected: 3")
+}
+
+func TestSwitchList_ClearsFilterAndSelection(t *testing.T) {
+	// Number key (1) → Inbox
+	m, _, tasks := setupModelWithInboxTasks(t, "a", "b")
+	m.filterQuery = "foo"
+	m.filtering = false
+	m.selected[tasks[0].ID] = struct{}{}
+	require.NotEmpty(t, m.filterQuery)
+	require.Equal(t, 1, len(m.selected))
+
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
+	mm := m2.(Model)
+	require.Equal(t, "", mm.filterQuery)
+	require.False(t, mm.filtering)
+	require.Equal(t, 0, len(mm.selected))
+
+	// Tab
+	m, _, tasks = setupModelWithInboxTasks(t, "a", "b")
+	m.filterQuery = "foo"
+	m.filtering = false
+	m.selected[tasks[0].ID] = struct{}{}
+	require.NotEmpty(t, m.filterQuery)
+	require.Equal(t, 1, len(m.selected))
+
+	m3, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	mm = m3.(Model)
+	require.Equal(t, "", mm.filterQuery)
+	require.False(t, mm.filtering)
+	require.Equal(t, 0, len(mm.selected))
+
+	// Shift+Tab
+	m, _, tasks = setupModelWithInboxTasks(t, "a", "b")
+	m.filterQuery = "foo"
+	m.filtering = false
+	m.selected[tasks[0].ID] = struct{}{}
+	require.NotEmpty(t, m.filterQuery)
+	require.Equal(t, 1, len(m.selected))
+
+	m4, _ := m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	mm = m4.(Model)
+	require.Equal(t, "", mm.filterQuery)
+	require.False(t, mm.filtering)
+	require.Equal(t, 0, len(mm.selected))
+}
+
+func TestHelp_IncludesNewBindings(t *testing.T) {
+	m := newTestModel(t)
+	out := m.viewHelp()
+	require.Contains(t, out, "/", "help must list filter binding")
+	require.Contains(t, out, "*", "help must list select-all binding")
+	require.Contains(t, out, "space", "help must list toggle-select binding")
+}
+
+func TestFooter_IncludesNewHints(t *testing.T) {
+	m := newTestModel(t)
+	out := m.viewFooter()
+	require.Contains(t, out, "/", "footer must mention filter")
+	require.Contains(t, out, "space", "footer must mention select")
+}
+
 func TestSelectTheme_DefaultDark(t *testing.T) {
 	tm := SelectTheme(func(string) string { return "" })
 	require.Equal(t, "catppuccin-macchiato", tm.Name)
@@ -228,4 +431,266 @@ func TestSelectTheme_NoColorOverrides(t *testing.T) {
 	}
 	tm := SelectTheme(env)
 	require.Equal(t, "monochrome", tm.Name)
+}
+
+// switchKeyMsgs lists every key that should trigger switchList semantics
+// (Tab/Shift+Tab plus the digit keys 1..6).
+func switchKeyMsgs() []tea.KeyMsg {
+	return []tea.KeyMsg{
+		{Type: tea.KeyTab},
+		{Type: tea.KeyShiftTab},
+		{Type: tea.KeyRunes, Runes: []rune{'1'}},
+		{Type: tea.KeyRunes, Runes: []rune{'2'}},
+		{Type: tea.KeyRunes, Runes: []rune{'3'}},
+		{Type: tea.KeyRunes, Runes: []rune{'4'}},
+		{Type: tea.KeyRunes, Runes: []rune{'5'}},
+		{Type: tea.KeyRunes, Runes: []rune{'6'}},
+	}
+}
+
+// TestProp_SwitchListResetsState verifies CP-4 (REQ-1.6, 2.7):
+// every switch key clears the filter query, leaves filtering=false,
+// and empties the selection.
+func TestProp_SwitchListResetsState(t *testing.T) {
+	keys := switchKeyMsgs()
+	for i, msg := range keys {
+		msg := msg
+		t.Run(fmt.Sprintf("key_%d", i), func(t *testing.T) {
+			rapid.Check(t, func(rt *rapid.T) {
+				query := rapid.StringMatching(`[a-z]{1,8}`).Draw(rt, "query")
+				n := rapid.IntRange(1, 5).Draw(rt, "selN")
+
+				m, _, tasks := setupRapidModel(rt, "a", "b", "c", "d", "e")
+				m.filterQuery = query
+				m.filtering = false
+				for j := 0; j < n; j++ {
+					m.selected[tasks[j].ID] = struct{}{}
+				}
+				require.NotEmpty(rt, m.filterQuery)
+				require.Equal(rt, n, len(m.selected))
+
+				m2, _ := m.Update(msg)
+				mm := m2.(Model)
+				require.Equal(rt, "", mm.filterQuery, "switchList must clear filterQuery")
+				require.False(rt, mm.filtering, "switchList must leave filtering=false")
+				require.Equal(rt, 0, len(mm.selected), "switchList must empty the selection")
+			})
+		})
+	}
+}
+
+// pbtModelHelper adapts setupModelWithInboxTasks for rapid.Check
+// callbacks. setupModelWithInboxTasks takes a *testing.T (used for
+// t.Helper), so we wrap rapid's testing.TB equivalent.
+func setupRapidModel(rt *rapid.T, titles ...string) (Model, *app.Service, []task.Task) {
+	rt.Helper()
+	svc := app.New(fakes.New(), fixedClock{now: time.Date(2026, 5, 25, 10, 0, 0, 0, time.UTC)})
+	m := NewModel(svc, NewTheme())
+	ctx := context.Background()
+	tasks := make([]task.Task, 0, len(titles))
+	for _, title := range titles {
+		tk, err := svc.AddTask(ctx, app.AddTaskInput{Title: title})
+		require.NoError(rt, err)
+		tasks = append(tasks, tk)
+	}
+	m.activeList = listInbox
+	m.tasks = tasks
+	m.cursor = 0
+	return m, svc, tasks
+}
+
+// TestProp_SpaceIsInvolution verifies CP-5 (REQ-2.1): pressing Space
+// twice on the same cursor task leaves the selection size unchanged.
+func TestProp_SpaceIsInvolution(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		n := rapid.IntRange(1, 5).Draw(t, "n")
+		titles := make([]string, n)
+		for i := range titles {
+			titles[i] = fmt.Sprintf("task-%d", i)
+		}
+		m, _, _ := setupRapidModel(t, titles...)
+		cursor := rapid.IntRange(0, n-1).Draw(t, "cursor")
+		m.cursor = cursor
+		initialN := len(m.selected)
+
+		// Press space twice; cursor must not move between presses.
+		m2, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
+		mm := m2.(Model)
+		require.Equal(t, cursor, mm.cursor, "Space must not move cursor")
+		m3, _ := mm.Update(tea.KeyMsg{Type: tea.KeySpace})
+		mm = m3.(Model)
+		require.Equal(t, initialN, len(mm.selected), "two Space presses on same cursor must be identity on |selected|")
+	})
+}
+
+// TestProp_PrefixIffNonEmpty verifies CP-6 (REQ-2.2, 2.3): the
+// "[x] / [ ]" prefix renders if and only if |selected| > 0.
+func TestProp_PrefixIffNonEmpty(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		n := rapid.IntRange(1, 5).Draw(t, "n")
+		titles := make([]string, n)
+		for i := range titles {
+			titles[i] = fmt.Sprintf("task-%d", i)
+		}
+		m, _, tasks := setupRapidModel(t, titles...)
+		// Choose a subset of indices to mark as selected.
+		mask := rapid.SliceOfN(rapid.Bool(), n, n).Draw(t, "mask")
+		selN := 0
+		for i, b := range mask {
+			if b {
+				m.selected[tasks[i].ID] = struct{}{}
+				selN++
+			}
+		}
+		out := m.viewList()
+		if selN > 0 {
+			containsAny := strings.Contains(out, "[x]") || strings.Contains(out, "[ ]")
+			require.True(t, containsAny, "with non-empty selection the prefix must render")
+		} else {
+			require.False(t, strings.Contains(out, "[x]"), "with empty selection the [x] prefix must NOT render")
+			require.False(t, strings.Contains(out, "[ ]"), "with empty selection the [ ] prefix must NOT render")
+		}
+	})
+}
+
+// TestProp_StarSelectsAllVisible verifies CP-7 (REQ-2.4): '*' adds
+// every visible task ID to m.selected.
+func TestProp_StarSelectsAllVisible(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		// Titles drawn from a small alphabet so the query reliably matches
+		// at least one (or zero, which is also a valid spec point).
+		n := rapid.IntRange(1, 6).Draw(t, "n")
+		titles := make([]string, n)
+		for i := range titles {
+			titles[i] = rapid.StringMatching(`[a-c]{1,5}`).Draw(t, fmt.Sprintf("title-%d", i))
+		}
+		m, _, _ := setupRapidModel(t, titles...)
+		// Optionally apply a filter that may narrow the visible set.
+		useFilter := rapid.Bool().Draw(t, "useFilter")
+		if useFilter {
+			m.filterQuery = rapid.StringMatching(`[a-c]{0,3}`).Draw(t, "query")
+		}
+		visible := displayedTasks(m)
+
+		m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'*'}})
+		mm := m2.(Model)
+		for _, vt := range visible {
+			_, ok := mm.selected[vt.ID]
+			require.True(t, ok, "task %v expected in selection after '*'", vt.ID)
+		}
+	})
+}
+
+// TestProp_EscClearsSelection verifies CP-8 (REQ-2.5): in list mode,
+// Esc empties the selection set.
+func TestProp_EscClearsSelection(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		n := rapid.IntRange(1, 5).Draw(t, "n")
+		titles := make([]string, n)
+		for i := range titles {
+			titles[i] = fmt.Sprintf("t-%d", i)
+		}
+		m, _, tasks := setupRapidModel(t, titles...)
+		// Populate selection with a non-empty random subset.
+		selCount := rapid.IntRange(1, n).Draw(t, "selCount")
+		for i := 0; i < selCount; i++ {
+			m.selected[tasks[i].ID] = struct{}{}
+		}
+		require.Equal(t, selCount, len(m.selected))
+		require.False(t, m.filtering)
+		require.Nil(t, m.confirm)
+
+		m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		mm := m2.(Model)
+		require.Equal(t, 0, len(mm.selected), "Esc must clear the selection in list mode")
+	})
+}
+
+// TestProp_SelectionSubsetOfVisible verifies CP-9 (REQ-2.6): for any
+// sequence of rune mutations to the filter query, every ID in
+// m.selected corresponds to a task in displayedTasks(m).
+func TestProp_SelectionSubsetOfVisible(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		titles := []string{"alpha", "beta", "gamma", "delta", "epsilon"}
+		m, _, tasks := setupRapidModel(t, titles...)
+		// Seed the selection with every task (the most stringent case).
+		for _, tk := range tasks {
+			m.selected[tk.ID] = struct{}{}
+		}
+		// Enter filter mode.
+		m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		mm := m2.(Model)
+		require.True(t, mm.filtering)
+
+		body := rapid.SliceOfN(rapid.StringMatching(`[a-z]`), 0, 8).Draw(t, "body")
+		for _, s := range body {
+			r := []rune(s)[0]
+			mNext, _ := mm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			mm = mNext.(Model)
+			visible := make(map[id.ID]struct{}, len(mm.tasks))
+			for _, vt := range displayedTasks(mm) {
+				visible[vt.ID] = struct{}{}
+			}
+			for sid := range mm.selected {
+				_, ok := visible[sid]
+				require.True(t, ok, "selected ID %v must be visible after rune %q (query=%q)", sid, r, mm.filterQuery)
+			}
+		}
+	})
+}
+
+// bareTestModel constructs a Model without any service dependency
+// (sufficient for view-only properties that don't load tasks).
+func bareTestModel() Model {
+	return NewModel(nil, NewTheme())
+}
+
+// TestProp_StatusBarShowsCount verifies CP-10 (REQ-2.8): when N tasks
+// are selected, viewFooter contains "Selected: N".
+func TestProp_StatusBarShowsCount(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		n := rapid.IntRange(1, 20).Draw(rt, "n")
+		m := bareTestModel()
+		for i := 0; i < n; i++ {
+			m.selected[id.New()] = struct{}{}
+		}
+		out := m.viewFooter()
+		require.Contains(rt, out, fmt.Sprintf("Selected: %d", n))
+	})
+}
+
+// TestProp_HelpContainsNewKeys verifies CP-17 (REQ-4.1): the help
+// view always advertises '/', '*', and 'space', regardless of
+// selection size or filter state.
+func TestProp_HelpContainsNewKeys(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		selN := rapid.IntRange(0, 10).Draw(rt, "selN")
+		filtering := rapid.Bool().Draw(rt, "filtering")
+		m := bareTestModel()
+		for i := 0; i < selN; i++ {
+			m.selected[id.New()] = struct{}{}
+		}
+		m.filtering = filtering
+		out := m.viewHelp()
+		require.Contains(rt, out, "/", "help must advertise the filter binding")
+		require.Contains(rt, out, "*", "help must advertise the select-all binding")
+		require.Contains(rt, out, "space", "help must advertise the toggle-select binding")
+	})
+}
+
+// TestProp_FooterContainsNewKeys verifies CP-18 (REQ-4.2): the
+// list-mode footer always mentions '/' and 'space'.
+func TestProp_FooterContainsNewKeys(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		selN := rapid.IntRange(0, 10).Draw(rt, "selN")
+		m := bareTestModel()
+		for i := 0; i < selN; i++ {
+			m.selected[id.New()] = struct{}{}
+		}
+		m.filtering = false
+		m.confirm = nil
+		out := m.viewFooter()
+		require.Contains(rt, out, "/", "footer must mention the filter key")
+		require.Contains(rt, out, "space", "footer must mention the select key")
+	})
 }

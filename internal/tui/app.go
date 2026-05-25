@@ -34,6 +34,10 @@ type Model struct {
 	quickInput  textinput.Model
 	editor      EditorModel
 	width       int
+	selected    map[id.ID]struct{}
+	confirm     *confirmState
+	filterQuery string
+	filtering   bool
 }
 
 // allLists is the canonical order used by Tab/Shift+Tab cycling and the header.
@@ -51,6 +55,7 @@ func NewModel(svc *app.Service, theme Theme) Model {
 		screen:     screenList,
 		activeList: listToday,
 		quickInput: ti,
+		selected:   make(map[id.ID]struct{}),
 	}
 }
 
@@ -68,6 +73,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cursor = max(0, len(m.tasks)-1)
 		}
 		return m, nil
+
+	case bulkResultMsg:
+		if msg.fatal {
+			m.statusMsg = msg.lastErr.Error()
+			m.statusUntil = time.Now().Add(statusFadeDuration)
+			return m, tea.Tick(statusFadeDuration, func(time.Time) tea.Msg { return clearStatusMsg{} })
+		}
+		m.selected = make(map[id.ID]struct{})
+		total := msg.succeeded + msg.failed
+		if msg.failed > 0 {
+			m.statusMsg = fmt.Sprintf("%s: %d/%d succeeded, %d failed", msg.action.label(), msg.succeeded, total, msg.failed)
+		} else {
+			m.statusMsg = fmt.Sprintf("%s: %d done", msg.action.label(), msg.succeeded)
+		}
+		m.statusUntil = time.Now().Add(statusFadeDuration)
+		return m, tea.Batch(
+			m.loadCurrentList(),
+			tea.Tick(statusFadeDuration, func(time.Time) tea.Msg { return clearStatusMsg{} }),
+		)
 
 	case errorMsg:
 		m.statusMsg = msg.err.Error()
@@ -102,6 +126,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.confirm != nil {
+		return handleConfirmKey(m, msg)
+	}
+	if m.filtering {
+		return handleFilterKey(m, msg)
+	}
 	switch m.screen {
 	case screenQuickEntry:
 		return m.handleQuickEntryKey(msg)
@@ -110,6 +140,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch {
+	case key.Matches(msg, m.keys.ClearSelection) && m.screen == screenList && len(m.selected) > 0:
+		m.selected = make(map[id.ID]struct{})
+		return m, nil
 	case key.Matches(msg, m.keys.Quit):
 		return m, tea.Quit
 	case key.Matches(msg, m.keys.Help):
@@ -118,6 +151,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.screen = screenHelp
 		}
+		return m, nil
+	case key.Matches(msg, m.keys.Filter):
+		m.filtering = true
+		m.filterQuery = ""
 		return m, nil
 	case key.Matches(msg, m.keys.NextView):
 		return m.switchList(nextList(m.activeList, +1))
@@ -135,6 +172,21 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.switchList(listSomeday)
 	case key.Matches(msg, m.keys.Logbook):
 		return m.switchList(listLogbook)
+	case key.Matches(msg, m.keys.ToggleSelect):
+		sel := m.selectedTask()
+		if sel != nil {
+			if _, ok := m.selected[sel.ID]; ok {
+				delete(m.selected, sel.ID)
+			} else {
+				m.selected[sel.ID] = struct{}{}
+			}
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.SelectAll):
+		for _, t := range displayedTasks(m) {
+			m.selected[t.ID] = struct{}{}
+		}
+		return m, nil
 	case key.Matches(msg, m.keys.Up):
 		if m.cursor > 0 {
 			m.cursor--
@@ -153,13 +205,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.quickInput.Focus()
 		return m, textinput.Blink
 	case key.Matches(msg, m.keys.Complete):
-		return m, m.completeSelected()
+		return dispatch(m, bulkActionComplete)
 	case key.Matches(msg, m.keys.Cancel):
-		return m, m.cancelSelected()
+		return dispatch(m, bulkActionCancel)
 	case key.Matches(msg, m.keys.Delete):
-		return m, m.deleteSelected()
+		return dispatch(m, bulkActionDelete)
 	case key.Matches(msg, m.keys.PinToday):
-		return m, m.pinSelected()
+		return dispatch(m, bulkActionPin)
 	case key.Matches(msg, m.keys.Refresh):
 		return m, m.loadCurrentList()
 	}
@@ -256,6 +308,9 @@ func (m Model) handleQuickEntryKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) switchList(l listKind) (tea.Model, tea.Cmd) {
+	m.filterQuery = ""
+	m.filtering = false
+	m.selected = make(map[id.ID]struct{})
 	m.activeList = l
 	m.cursor = 0
 	return m, m.loadCurrentList()
@@ -359,6 +414,11 @@ func (m Model) pinSelected() tea.Cmd {
 // View
 
 func (m Model) View() string {
+	if m.confirm != nil {
+		modal := m.theme.Modal.Render(fmt.Sprintf("%s %d tasks? (y/n)", m.confirm.action.label(), len(m.confirm.ids)))
+		body := lipgloss.JoinVertical(lipgloss.Left, m.viewList(), modal)
+		return lipgloss.JoinVertical(lipgloss.Left, m.viewHeader(), body, m.viewFooter())
+	}
 	var body string
 	switch m.screen {
 	case screenHelp:
@@ -396,11 +456,24 @@ func (m Model) viewHeader() string {
 }
 
 func (m Model) viewList() string {
-	if len(m.tasks) == 0 {
+	disp := displayedTasks(m)
+	if len(disp) == 0 {
+		if m.filterQuery != "" {
+			return m.theme.Dim.Render("\n  (no matches)\n")
+		}
 		return m.theme.Dim.Render("\n  (no tasks)\n")
 	}
-	lines := make([]string, 0, len(m.tasks))
-	for i, t := range m.tasks {
+	lines := make([]string, 0, len(disp))
+	showPrefix := len(m.selected) > 0
+	for i, t := range disp {
+		prefix := ""
+		if showPrefix {
+			if _, ok := m.selected[t.ID]; ok {
+				prefix = "[x] "
+			} else {
+				prefix = "[ ] "
+			}
+		}
 		marker := "  "
 		if i == m.cursor {
 			marker = m.theme.Selected.Render("> ")
@@ -415,7 +488,7 @@ func (m Model) viewList() string {
 			dates += m.theme.Deadline.Render(dl)
 		}
 		short := m.theme.Dim.Render(id.Short(t.ID))
-		lines = append(lines, fmt.Sprintf("%s%s  %s%s", marker, short, title, dates))
+		lines = append(lines, fmt.Sprintf("%s%s%s  %s%s", prefix, marker, short, title, dates))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -430,6 +503,7 @@ func (m Model) viewHelp() string {
 		m.keys.Inbox, m.keys.Today, m.keys.Upcoming, m.keys.Anytime, m.keys.Someday, m.keys.Logbook,
 		m.keys.Up, m.keys.Down,
 		m.keys.QuickEntry, m.keys.Complete, m.keys.Cancel, m.keys.Delete, m.keys.PinToday, m.keys.Refresh,
+		m.keys.Filter, m.keys.ToggleSelect, m.keys.SelectAll, m.keys.ClearSelection,
 	}
 	lines := []string{m.theme.Title.Render("Keybindings")}
 	for _, b := range binds {
@@ -440,14 +514,25 @@ func (m Model) viewHelp() string {
 }
 
 func (m Model) viewFooter() string {
-	hints := "?: help  ⇥: next view  n: quick  ↵: edit  c: complete  q: quit"
+	hints := "?: help  ⇥: next view  /: filter  space: select  n: quick  ↵: edit  c: complete  q: quit"
 	if m.screen == screenEditor {
 		hints = "Tab: field  Ctrl+S: save  Esc: cancel"
+	}
+	if m.filtering {
+		hints = "Filter: " + m.filterQuery + "_  Enter=save  Esc=cancel"
 	}
 	left := m.theme.Help.Render(hints)
 	right := ""
 	if m.statusMsg != "" {
 		right = m.theme.StatusError.Render(m.statusMsg)
+	}
+	if len(m.selected) > 0 {
+		counter := m.theme.Selected.Render(fmt.Sprintf("Selected: %d", len(m.selected)))
+		if right != "" {
+			right = right + "  " + counter
+		} else {
+			right = counter
+		}
 	}
 	return left + "  " + right
 }

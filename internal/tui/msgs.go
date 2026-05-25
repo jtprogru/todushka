@@ -27,6 +27,17 @@ const (
 
 type editorSavedMsg struct{ updated task.Task }
 
+// bulkResultMsg is emitted by runBulk after iterating all selected IDs.
+// Fatal=true when the run was halted by storage.ErrDatabaseLocked or
+// context.Canceled; in that case the selection set is preserved.
+type bulkResultMsg struct {
+	action    bulkAction
+	succeeded int
+	failed    int
+	lastErr   error
+	fatal     bool
+}
+
 type listKind int
 
 const (
