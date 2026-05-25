@@ -156,7 +156,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case editorSavedMsg:
 		m.screen = screenList
-		return m, m.loadCurrentList()
+		// Inline splice for immediate visual update (REQ-2.1, 2.3, 2.4).
+		for i := range m.tasks {
+			if m.tasks[i].ID == msg.updated.ID {
+				m.tasks[i] = msg.updated
+				break
+			}
+		}
+		// Async refresh handles sort order, header counts, and name cache.
+		return m, tea.Batch(
+			m.loadCurrentList(),
+			fetchListCounts(m.service),
+		)
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -306,8 +317,12 @@ func (m Model) handleEditorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.PrevField):
 		m.editor = m.editor.prevField()
 		return m, m.editor.focusCurrent()
-	case m.editor.focus == fieldSomeday && msg.Type == tea.KeySpace:
-		m.editor.someday = !m.editor.someday
+	case m.editor.focus == fieldWhen && msg.Type == tea.KeySpace:
+		if m.editor.when == whenAnytime {
+			m.editor.when = whenSomeday
+		} else {
+			m.editor.when = whenAnytime
+		}
 		return m, nil
 	}
 	var cmd tea.Cmd
@@ -470,6 +485,15 @@ func (m Model) viewBody() string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }
 
+// renderSeparator returns a one-line horizontal "─" rule of width characters,
+// styled via theme.Help. Returns "" if width <= 0.
+func renderSeparator(theme Theme, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	return theme.Help.Render(strings.Repeat("─", width))
+}
+
 func (m Model) View() string {
 	// Editor takes full body — no clamp.
 	if m.screen == screenEditor {
@@ -490,17 +514,18 @@ func (m Model) View() string {
 			body = m.viewBody()
 		}
 	}
-	if m.height >= 10 && m.width >= 40 {
+	if m.height >= 10 && m.width >= 40 && m.screen != screenEditor {
 		header := m.viewHeader()
 		footer := m.viewFooter()
+		sep := renderSeparator(m.theme, m.width)
 		headerH := lipgloss.Height(header)
 		footerH := lipgloss.Height(footer)
-		bodyH := m.height - headerH - footerH
+		bodyH := m.height - headerH - footerH - 2 // -2 for the two separator rows
 		if bodyH < 0 {
 			bodyH = 0
 		}
 		clampedBody := lipgloss.NewStyle().Height(bodyH).MaxHeight(bodyH).Render(body)
-		return lipgloss.JoinVertical(lipgloss.Left, header, clampedBody, footer)
+		return lipgloss.JoinVertical(lipgloss.Left, header, sep, clampedBody, sep, footer)
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, m.viewHeader(), body, m.viewFooter())
 }

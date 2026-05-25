@@ -20,14 +20,17 @@ func Run(svc *app.Service, cfg config.AppConfig) error {
 }
 
 // selectThemeFromConfig picks the theme based on the config value, with env
-// fallbacks (NO_COLOR overrides everything to monochrome; empty config theme
-// defers to TODUSHKA_THEME).
+// fallbacks. NO_COLOR has absolute precedence (REQ-1.6); "auto"/"system"
+// trigger OS dark-mode detection via resolveAutoTheme (REQ-1.1).
 func selectThemeFromConfig(name string, env func(string) string) Theme {
 	if env == nil {
 		env = func(string) string { return "" }
 	}
 	if env("NO_COLOR") != "" {
 		return NewMonochromeTheme()
+	}
+	if name == "auto" || name == "system" {
+		name = resolveAutoTheme()
 	}
 	switch name {
 	case "latte", "light":

@@ -26,7 +26,7 @@ func (c AppConfig) Validate() (AppConfig, []string) {
 	def := Defaults()
 	var warns []string
 	switch c.Theme {
-	case "macchiato", "latte", "mono", "":
+	case "macchiato", "latte", "mono", "auto", "system", "":
 		// ok
 	default:
 		warns = append(warns, "invalid theme '"+c.Theme+"', using '"+def.Theme+"'")

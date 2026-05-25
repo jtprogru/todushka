@@ -401,3 +401,115 @@ func TestProp_CountsMatchService(t *testing.T) {
 		require.Equal(rt, n, msg.counts[listInbox])
 	})
 }
+
+func TestRenderSeparator_FullWidth(t *testing.T) {
+	s := renderSeparator(NewTheme(), 80)
+	// Strip ANSI escapes to count "─" reliably. lipgloss adds them around content.
+	// Simpler: count occurrences of "─" rune.
+	count := strings.Count(s, "─")
+	require.Equal(t, 80, count, "separator should contain exactly 80 box-drawing rune characters")
+}
+
+func TestRenderSeparator_EmptyOnZero(t *testing.T) {
+	s := renderSeparator(NewTheme(), 0)
+	require.Empty(t, s)
+}
+
+func TestRenderSeparator_EmptyOnNegative(t *testing.T) {
+	s := renderSeparator(NewTheme(), -5)
+	require.Empty(t, s)
+}
+
+func TestView_HasSeparatorsInFullScreen(t *testing.T) {
+	m, _, _ := setupModelWithInboxTasks(t, "x")
+	m.width = 120
+	m.height = 40
+	out := m.View()
+	require.Contains(t, out, "─", "full-screen view should contain separator rune")
+	// Count: 2 separator rows × 120 width = 240 "─" runes
+	count := strings.Count(out, "─")
+	require.GreaterOrEqual(t, count, 240, "expected at least 240 ─ characters (2 rows × 120 width)")
+}
+
+func TestView_NoSeparatorsInLegacy(t *testing.T) {
+	m, _, _ := setupModelWithInboxTasks(t, "x")
+	m.width = 120
+	m.height = 5 // below threshold
+	out := m.View()
+	require.NotContains(t, out, "─", "legacy mode must not render section separators")
+}
+
+func TestView_NoSeparatorsInEditor(t *testing.T) {
+	m, _, _ := setupModelWithInboxTasks(t, "x")
+	m.width = 120
+	m.height = 40
+	m.screen = screenEditor
+	m.editor = NewEditor(m.tasks[0])
+	out := m.View()
+	// The editor's own border decorations include "─" characters, but the
+	// full-width section separators (m.width consecutive "─") must not be
+	// rendered in editor mode (REQ-4.5). We assert absence of a full-width
+	// horizontal rule by checking for a run of m.width "─" runes.
+	fullWidthRule := strings.Repeat("─", m.width)
+	require.NotContains(t, out, fullWidthRule, "editor mode must not render full-width section separators")
+}
+
+func TestView_FullScreenHeightWithSeparators(t *testing.T) {
+	m, _, _ := setupModelWithInboxTasks(t, "x")
+	m.width = 120
+	m.height = 40
+	out := m.View()
+	require.Equal(t, 40, lipgloss.Height(out), "lipgloss height invariant preserved")
+}
+
+// TestProp_SeparatorsConditional verifies CP-8 (REQ-4.1, 4.2, 4.4, 4.5):
+// section separators render iff width >= 40, height >= 10, and the
+// screen is not the editor. Restricted to screenList without modal
+// overlays — overlay screens (editor, quick-entry, confirm) render
+// their own bordered widgets whose "─" runs are unrelated to section
+// separators. Those cases are locked by adjacent unit tests
+// (TestView_NoSeparatorsInEditor, TestView_HasSeparatorsInFullScreen,
+// TestView_NoSeparatorsInLegacy).
+func TestProp_SeparatorsConditional(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		m, _, _ := setupRapidModel(rt, "x")
+		m.width = rapid.IntRange(20, 200).Draw(rt, "width")
+		m.height = rapid.IntRange(3, 60).Draw(rt, "height")
+		m.screen = screenList
+		m.confirm = nil
+		out := m.View()
+		fullWidthRule := strings.Repeat("─", m.width)
+		sepActive := m.height >= 10 && m.width >= 40
+		if sepActive {
+			require.Contains(rt, out, fullWidthRule, "expected section separator")
+		} else {
+			require.NotContains(rt, out, fullWidthRule, "did not expect section separator")
+		}
+	})
+}
+
+// TestProp_SeparatorWidth verifies CP-9 (REQ-4.3): renderSeparator
+// produces exactly width "─" runes.
+func TestProp_SeparatorWidth(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		w := rapid.IntRange(40, 200).Draw(rt, "width")
+		s := renderSeparator(NewTheme(), w)
+		count := strings.Count(s, "─")
+		require.Equal(rt, w, count)
+	})
+}
+
+// TestProp_FullScreenHeightWithSeparators verifies CP-10 (REQ-4.6):
+// when separators are active, the rendered View still occupies exactly
+// m.height lines (bodyH accounts for the two extra separator rows).
+func TestProp_FullScreenHeightWithSeparators(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		m, _, _ := setupRapidModel(rt, "x")
+		m.width = rapid.IntRange(40, 200).Draw(rt, "width")
+		m.height = rapid.IntRange(10, 60).Draw(rt, "height")
+		// Ensure screen is not editor so full-screen clamp is active
+		m.screen = screenList
+		out := m.View()
+		require.Equal(rt, m.height, lipgloss.Height(out))
+	})
+}

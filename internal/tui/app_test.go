@@ -780,3 +780,142 @@ func TestWindowSize_BothAxesTracked(t *testing.T) {
 	require.Equal(t, 120, mm.width)
 	require.Equal(t, 40, mm.height)
 }
+
+func TestEditorSavedMsg_InlineSpliceByID(t *testing.T) {
+	m, _, tasks := setupModelWithInboxTasks(t, "old title", "other")
+	updated := tasks[0]
+	updated.Title = "new title"
+	m2, _ := m.Update(editorSavedMsg{updated: updated})
+	mm := m2.(Model)
+	require.Equal(t, "new title", mm.tasks[0].Title, "inline splice replaces by ID")
+	require.Len(t, mm.tasks, 2, "length preserved")
+}
+
+func TestEditorSavedMsg_NotFoundSkipsSplice(t *testing.T) {
+	m, _, _ := setupModelWithInboxTasks(t, "a", "b")
+	ghost := task.Task{ID: id.New(), Title: "ghost"}
+	m2, _ := m.Update(editorSavedMsg{updated: ghost})
+	mm := m2.(Model)
+	require.Len(t, mm.tasks, 2)
+	require.NotEqual(t, "ghost", mm.tasks[0].Title)
+	require.NotEqual(t, "ghost", mm.tasks[1].Title)
+}
+
+func TestEditorSavedMsg_PreservesSliceLength(t *testing.T) {
+	m, _, tasks := setupModelWithInboxTasks(t, "a", "b", "c")
+	require.Len(t, m.tasks, 3)
+	upd := tasks[1]
+	upd.Title = "modified"
+	m2, _ := m.Update(editorSavedMsg{updated: upd})
+	mm := m2.(Model)
+	require.Len(t, mm.tasks, 3)
+}
+
+func TestEditorSavedMsg_FiresBatchedCmd(t *testing.T) {
+	m, _, tasks := setupModelWithInboxTasks(t, "x")
+	_, cmd := m.Update(editorSavedMsg{updated: tasks[0]})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	batch, ok := msg.(tea.BatchMsg)
+	require.True(t, ok, "expected tea.BatchMsg, got %T", msg)
+	foundCounts := false
+	foundTasks := false
+	for _, sub := range batch {
+		if sub == nil {
+			continue
+		}
+		switch sub().(type) {
+		case countsLoadedMsg:
+			foundCounts = true
+		case tasksLoadedMsg:
+			foundTasks = true
+		}
+	}
+	require.True(t, foundCounts, "countsLoadedMsg expected in batch")
+	require.True(t, foundTasks, "tasksLoadedMsg expected in batch")
+}
+
+// TestProp_EditSplicePreservesLength verifies CP-3 (REQ-2.4): an
+// editorSavedMsg never changes the length of m.tasks, whether the
+// updated task matches an existing ID or is a ghost.
+func TestProp_EditSplicePreservesLength(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		n := rapid.IntRange(1, 6).Draw(rt, "n")
+		titles := make([]string, n)
+		for i := 0; i < n; i++ {
+			titles[i] = fmt.Sprintf("t%d", i)
+		}
+		m, _, tasks := setupRapidModel(rt, titles...)
+		// Sometimes target an existing task, sometimes a ghost
+		useGhost := rapid.Bool().Draw(rt, "useGhost")
+		var upd task.Task
+		if useGhost {
+			upd = task.Task{ID: id.New(), Title: "ghost"}
+		} else {
+			idx := rapid.IntRange(0, n-1).Draw(rt, "idx")
+			upd = tasks[idx]
+			upd.Title = "modified"
+		}
+		m2, _ := m.Update(editorSavedMsg{updated: upd})
+		mm := m2.(Model)
+		require.Equal(rt, n, len(mm.tasks), "length preserved")
+	})
+}
+
+// TestProp_EditSpliceByID verifies CP-4 (REQ-2.1, 2.3): the inline splice
+// targets the task whose ID matches; non-target tasks remain untouched.
+func TestProp_EditSpliceByID(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		n := rapid.IntRange(1, 6).Draw(rt, "n")
+		titles := make([]string, n)
+		for i := 0; i < n; i++ {
+			titles[i] = fmt.Sprintf("orig%d", i)
+		}
+		m, _, tasks := setupRapidModel(rt, titles...)
+		idx := rapid.IntRange(0, n-1).Draw(rt, "idx")
+		upd := tasks[idx]
+		upd.Title = "spliced"
+		m2, _ := m.Update(editorSavedMsg{updated: upd})
+		mm := m2.(Model)
+		require.Equal(rt, "spliced", mm.tasks[idx].Title)
+		for i, tk := range mm.tasks {
+			if i != idx {
+				require.Equal(rt, tasks[i].Title, tk.Title, "non-target tasks unchanged")
+			}
+		}
+	})
+}
+
+// TestProp_RefreshBatchHasBothCmds verifies CP-12 (REQ-2.2): the cmd
+// produced after editorSavedMsg is a tea.BatchMsg that includes both a
+// countsLoadedMsg producer and a tasksLoadedMsg producer.
+func TestProp_RefreshBatchHasBothCmds(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		n := rapid.IntRange(1, 4).Draw(rt, "n")
+		titles := make([]string, n)
+		for i := 0; i < n; i++ {
+			titles[i] = fmt.Sprintf("t%d", i)
+		}
+		m, _, tasks := setupRapidModel(rt, titles...)
+		_, cmd := m.Update(editorSavedMsg{updated: tasks[0]})
+		require.NotNil(rt, cmd)
+		msg := cmd()
+		batch, ok := msg.(tea.BatchMsg)
+		require.True(rt, ok)
+		foundCounts := false
+		foundTasks := false
+		for _, sub := range batch {
+			if sub == nil {
+				continue
+			}
+			switch sub().(type) {
+			case countsLoadedMsg:
+				foundCounts = true
+			case tasksLoadedMsg:
+				foundTasks = true
+			}
+		}
+		require.True(rt, foundCounts, "countsLoadedMsg expected")
+		require.True(rt, foundTasks, "tasksLoadedMsg expected")
+	})
+}

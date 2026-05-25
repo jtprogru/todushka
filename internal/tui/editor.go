@@ -23,8 +23,15 @@ const (
 	fieldStart
 	fieldDeadline
 	fieldTags
-	fieldSomeday
+	fieldWhen
 	fieldCount
+)
+
+type shellEditorWhen int
+
+const (
+	whenAnytime shellEditorWhen = iota
+	whenSomeday
 )
 
 // EditorModel is a form that edits a single Task. Tab/Shift+Tab cycle fields;
@@ -37,7 +44,7 @@ type EditorModel struct {
 	start    textinput.Model
 	deadline textinput.Model
 	tags     textinput.Model
-	someday  bool
+	when     shellEditorWhen
 	focus    editorField
 
 	err string
@@ -74,6 +81,11 @@ func NewEditor(t task.Task) EditorModel {
 	// We don't have tag names available here without a DB roundtrip; the
 	// model receives an external `tagNames` value via SetTagNames if needed.
 
+	when := whenAnytime
+	if t.Someday {
+		when = whenSomeday
+	}
+
 	return EditorModel{
 		original: t,
 		title:    titleIn,
@@ -81,7 +93,7 @@ func NewEditor(t task.Task) EditorModel {
 		start:    startIn,
 		deadline: dlIn,
 		tags:     tagsIn,
-		someday:  t.Someday,
+		when:     when,
 		focus:    fieldTitle,
 	}
 }
@@ -147,7 +159,7 @@ func (m EditorModel) ApplyAndSave(ctx context.Context, svc *app.Service) (task.T
 	t := m.original
 	t.Title = strings.TrimSpace(m.title.Value())
 	t.Notes = strings.TrimSpace(m.notes.Value())
-	t.Someday = m.someday
+	t.Someday = m.when == whenSomeday
 
 	if s := strings.TrimSpace(m.start.Value()); s == "" {
 		t.StartDate = nil
@@ -215,14 +227,23 @@ func (m EditorModel) View(theme Theme, width int) string {
 		return label(name) + "\n" + style.Render(content)
 	}
 
-	someday := "[ ] Someday"
-	if m.someday {
-		someday = "[x] Someday"
-	}
-	if m.focus == fieldSomeday {
-		someday = theme.Selected.Render("▶ " + someday)
+	anytimeBullet := "[ ]"
+	somedayBullet := "[ ]"
+	if m.when == whenAnytime {
+		anytimeBullet = "[•]"
 	} else {
-		someday = theme.Dim.Render("  " + someday)
+		somedayBullet = "[•]"
+	}
+	whenBody := fmt.Sprintf("%s Anytime\n%s Someday", anytimeBullet, somedayBullet)
+	var whenSection string
+	if m.focus == fieldWhen {
+		whenSection = theme.Selected.Render("▶ When") + "\n" + theme.Selected.Render(whenBody)
+	} else {
+		whenSection = theme.Dim.Render("  When") + "\n" + theme.Dim.Render(whenBody)
+	}
+	// Anytime hint when no Area/Project (REQ-3.5)
+	if m.when == whenAnytime && m.original.AreaID == nil && m.original.ProjectID == nil {
+		whenSection += "\n" + theme.Dim.Render("(will appear in Inbox without Area/Project)")
 	}
 
 	body := lipgloss.JoinVertical(lipgloss.Left,
@@ -233,9 +254,9 @@ func (m EditorModel) View(theme Theme, width int) string {
 		field("Start", m.start.View(), m.focus == fieldStart),
 		field("Deadline", m.deadline.View(), m.focus == fieldDeadline),
 		field("Tags", m.tags.View(), m.focus == fieldTags),
-		someday,
+		whenSection,
 		"",
-		theme.Help.Render("Tab/Shift+Tab: field  Ctrl+S: save  Esc: cancel  Space: toggle Someday"),
+		theme.Help.Render("Tab/Shift+Tab: field  Ctrl+S: save  Esc: cancel  Space: toggle When"),
 	)
 	if m.err != "" {
 		body = lipgloss.JoinVertical(lipgloss.Left, body, theme.StatusError.Render(m.err))

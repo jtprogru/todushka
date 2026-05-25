@@ -36,3 +36,15 @@ func TestValidate_NumericRanges(t *testing.T) {
 	require.Equal(t, 5, c.BulkConfirmThreshold)
 	require.Equal(t, 8, c.NotesMaxLines)
 }
+
+func TestValidate_AutoThemeIsValid(t *testing.T) {
+	c, warns := AppConfig{Theme: "auto"}.Validate()
+	require.Empty(t, warns)
+	require.Equal(t, "auto", c.Theme)
+}
+
+func TestValidate_SystemThemeIsValid(t *testing.T) {
+	c, warns := AppConfig{Theme: "system"}.Validate()
+	require.Empty(t, warns)
+	require.Equal(t, "system", c.Theme)
+}
