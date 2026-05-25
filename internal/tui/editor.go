@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/jtprogru/todushka/internal/app"
 	"github.com/jtprogru/todushka/internal/domain/id"
 	"github.com/jtprogru/todushka/internal/domain/task"
+	"github.com/jtprogru/todushka/internal/storage"
 )
 
 type editorField int
@@ -22,9 +24,12 @@ const (
 	fieldNotes
 	fieldStart
 	fieldDeadline
+	fieldArea    // [NEW]
+	fieldProject // [NEW]
+	fieldHeading // [NEW]
 	fieldTags
 	fieldWhen
-	fieldCount
+	fieldCount // = 9
 )
 
 type shellEditorWhen int
@@ -43,6 +48,9 @@ type EditorModel struct {
 	notes    textarea.Model
 	start    textinput.Model
 	deadline textinput.Model
+	area     textinput.Model // [NEW]
+	project  textinput.Model // [NEW]
+	heading  textinput.Model // [NEW]
 	tags     textinput.Model
 	when     shellEditorWhen
 	focus    editorField
@@ -50,7 +58,7 @@ type EditorModel struct {
 	err string
 }
 
-func NewEditor(t task.Task) EditorModel {
+func NewEditor(ctx context.Context, t task.Task, svc *app.Service) EditorModel {
 	titleIn := textinput.New()
 	titleIn.SetValue(t.Title)
 	titleIn.CharLimit = 200
@@ -86,12 +94,47 @@ func NewEditor(t task.Task) EditorModel {
 		when = whenSomeday
 	}
 
+	areaIn := textinput.New()
+	areaIn.Placeholder = "area name (empty = Inbox)"
+	areaIn.CharLimit = 100
+	if t.AreaID != nil {
+		if a, err := svc.Repo().AreaGet(ctx, *t.AreaID); err == nil {
+			areaIn.SetValue(a.Name)
+		}
+	}
+
+	projectIn := textinput.New()
+	projectIn.Placeholder = "project name"
+	projectIn.CharLimit = 100
+	if t.ProjectID != nil {
+		if p, err := svc.Repo().ProjectGet(ctx, *t.ProjectID); err == nil {
+			projectIn.SetValue(p.Name)
+		}
+	}
+
+	headingIn := textinput.New()
+	headingIn.Placeholder = "heading name (requires project)"
+	headingIn.CharLimit = 100
+	if t.HeadingID != nil && t.ProjectID != nil {
+		if hs, err := svc.Repo().HeadingList(ctx, *t.ProjectID); err == nil {
+			for _, h := range hs {
+				if h.ID == *t.HeadingID {
+					headingIn.SetValue(h.Name)
+					break
+				}
+			}
+		}
+	}
+
 	return EditorModel{
 		original: t,
 		title:    titleIn,
 		notes:    notesIn,
 		start:    startIn,
 		deadline: dlIn,
+		area:     areaIn,
+		project:  projectIn,
+		heading:  headingIn,
 		tags:     tagsIn,
 		when:     when,
 		focus:    fieldTitle,
@@ -108,6 +151,9 @@ func (m *EditorModel) focusCurrent() tea.Cmd {
 	m.notes.Blur()
 	m.start.Blur()
 	m.deadline.Blur()
+	m.area.Blur()
+	m.project.Blur()
+	m.heading.Blur()
 	m.tags.Blur()
 	switch m.focus {
 	case fieldTitle:
@@ -118,6 +164,12 @@ func (m *EditorModel) focusCurrent() tea.Cmd {
 		return m.start.Focus()
 	case fieldDeadline:
 		return m.deadline.Focus()
+	case fieldArea:
+		return m.area.Focus()
+	case fieldProject:
+		return m.project.Focus()
+	case fieldHeading:
+		return m.heading.Focus()
 	case fieldTags:
 		return m.tags.Focus()
 	}
@@ -147,6 +199,12 @@ func (m EditorModel) UpdateForm(msg tea.Msg) (EditorModel, tea.Cmd) {
 		m.start, cmd = m.start.Update(msg)
 	case fieldDeadline:
 		m.deadline, cmd = m.deadline.Update(msg)
+	case fieldArea:
+		m.area, cmd = m.area.Update(msg)
+	case fieldProject:
+		m.project, cmd = m.project.Update(msg)
+	case fieldHeading:
+		m.heading, cmd = m.heading.Update(msg)
 	case fieldTags:
 		m.tags, cmd = m.tags.Update(msg)
 	}
@@ -193,10 +251,89 @@ func (m EditorModel) ApplyAndSave(ctx context.Context, svc *app.Service) (task.T
 	}
 	t.Tags = tagIDs
 
+	// Resolve Area
+	areaName := strings.TrimSpace(m.area.Value())
+	if areaName == "" {
+		t.AreaID = nil
+	} else {
+		a, err := svc.Repo().AreaFindByNormalized(ctx, areaName)
+		if err != nil {
+			if errors.Is(err, storage.ErrNotFound) {
+				return task.Task{}, fmt.Errorf("area %q not found", areaName)
+			}
+			return task.Task{}, fmt.Errorf("area %q: %w", areaName, err)
+		}
+		t.AreaID = &a.ID
+	}
+
+	// Resolve Project
+	projectName := strings.TrimSpace(m.project.Value())
+	if projectName == "" {
+		t.ProjectID = nil
+		t.HeadingID = nil
+	} else {
+		matches, err := svc.Repo().ProjectFindByName(ctx, projectName)
+		if err != nil {
+			return task.Task{}, fmt.Errorf("project %q: %w", projectName, err)
+		}
+		if len(matches) == 0 {
+			return task.Task{}, fmt.Errorf("project %q not found", projectName)
+		}
+		if len(matches) > 1 {
+			return task.Task{}, fmt.Errorf("project %q is ambiguous (%d matches), use CLI to disambiguate", projectName, len(matches))
+		}
+		newPID := matches[0].ID
+		// Detect project change → auto-clear heading (ADR-5)
+		if m.original.ProjectID == nil || newPID != *m.original.ProjectID {
+			t.HeadingID = nil
+		}
+		t.ProjectID = &newPID
+	}
+
+	// Resolve Heading
+	headingName := strings.TrimSpace(m.heading.Value())
+	if headingName == "" {
+		t.HeadingID = nil
+	} else {
+		if t.ProjectID == nil {
+			return task.Task{}, fmt.Errorf("heading %q requires a project", headingName)
+		}
+		headings, err := svc.Repo().HeadingList(ctx, *t.ProjectID)
+		if err != nil {
+			return task.Task{}, fmt.Errorf("heading %q: %w", headingName, err)
+		}
+		var found bool
+		for _, h := range headings {
+			if strings.EqualFold(h.Name, headingName) {
+				t.HeadingID = &h.ID
+				found = true
+				break
+			}
+		}
+		if !found {
+			return task.Task{}, fmt.Errorf("heading %q not found in project", headingName)
+		}
+	}
+
 	if err := svc.EditTask(ctx, t); err != nil {
 		return task.Task{}, err
 	}
 	return t, nil
+}
+
+// whenLabel returns the "When" section's primary label based on whether the
+// task is currently routed to Inbox (no Area/Project) or Anytime (has either).
+//
+//   - "Inbox"   when t.AreaID == nil AND t.ProjectID == nil
+//   - "Anytime" otherwise
+//
+// Pure function; called from View() to make the When label honest about the
+// task's actual bucket.
+func whenLabel(t task.Task) string {
+	if t.AreaID == nil && t.ProjectID == nil {
+		return "Inbox"
+	}
+	return "Anytime"
 }
 
 func splitTags(raw string) []string {
@@ -234,16 +371,13 @@ func (m EditorModel) View(theme Theme, width int) string {
 	} else {
 		somedayBullet = "[•]"
 	}
-	whenBody := fmt.Sprintf("%s Anytime\n%s Someday", anytimeBullet, somedayBullet)
+	primaryLabel := whenLabel(m.original)
+	whenBody := fmt.Sprintf("%s %s\n%s Someday", anytimeBullet, primaryLabel, somedayBullet)
 	var whenSection string
 	if m.focus == fieldWhen {
 		whenSection = theme.Selected.Render("▶ When") + "\n" + theme.Selected.Render(whenBody)
 	} else {
 		whenSection = theme.Dim.Render("  When") + "\n" + theme.Dim.Render(whenBody)
-	}
-	// Anytime hint when no Area/Project (REQ-3.5)
-	if m.when == whenAnytime && m.original.AreaID == nil && m.original.ProjectID == nil {
-		whenSection += "\n" + theme.Dim.Render("(will appear in Inbox without Area/Project)")
 	}
 
 	body := lipgloss.JoinVertical(lipgloss.Left,
@@ -253,6 +387,9 @@ func (m EditorModel) View(theme Theme, width int) string {
 		field("Notes", m.notes.View(), m.focus == fieldNotes),
 		field("Start", m.start.View(), m.focus == fieldStart),
 		field("Deadline", m.deadline.View(), m.focus == fieldDeadline),
+		field("Area", m.area.View(), m.focus == fieldArea),
+		field("Project", m.project.View(), m.focus == fieldProject),
+		field("Heading", m.heading.View(), m.focus == fieldHeading),
 		field("Tags", m.tags.View(), m.focus == fieldTags),
 		whenSection,
 		"",

@@ -283,7 +283,7 @@ func (m Model) openEditor() (tea.Model, tea.Cmd) {
 	if sel == nil {
 		return m, nil
 	}
-	m.editor = NewEditor(*sel)
+	m.editor = NewEditor(context.Background(), *sel, m.service)
 	tagNames, err := m.lookupTagNames(sel.Tags)
 	if err == nil {
 		m.editor.SetTagNames(tagNames)

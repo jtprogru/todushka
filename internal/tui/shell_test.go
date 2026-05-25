@@ -215,11 +215,11 @@ func TestView_SmallTerminalFallback(t *testing.T) {
 }
 
 func TestView_EditorIgnoresClamp(t *testing.T) {
-	m, _, _ := setupModelWithInboxTasks(t, "x")
+	m, svc, _ := setupModelWithInboxTasks(t, "x")
 	m.width = 200
 	m.height = 40
 	m.screen = screenEditor
-	m.editor = NewEditor(m.tasks[0])
+	m.editor = NewEditor(context.Background(), m.tasks[0], svc)
 	out := m.View()
 	require.NotEmpty(t, out)
 }
@@ -440,11 +440,11 @@ func TestView_NoSeparatorsInLegacy(t *testing.T) {
 }
 
 func TestView_NoSeparatorsInEditor(t *testing.T) {
-	m, _, _ := setupModelWithInboxTasks(t, "x")
+	m, svc, _ := setupModelWithInboxTasks(t, "x")
 	m.width = 120
 	m.height = 40
 	m.screen = screenEditor
-	m.editor = NewEditor(m.tasks[0])
+	m.editor = NewEditor(context.Background(), m.tasks[0], svc)
 	out := m.View()
 	// The editor's own border decorations include "─" characters, but the
 	// full-width section separators (m.width consecutive "─") must not be
