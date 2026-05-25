@@ -694,3 +694,71 @@ func TestProp_FooterContainsNewKeys(t *testing.T) {
 		require.Contains(rt, out, "space", "footer must mention the select key")
 	})
 }
+
+// Preservation tests for single-pane behavior (T-1 for dual-pane-layout).
+// These lock the current behavior at width=0 (test fixtures, initial state)
+// and width<100 (narrow terminals): no double-line border, full-width list.
+
+func TestTUI_ZeroWidthRendersSinglePane(t *testing.T) {
+	m, _, _ := setupModelWithInboxTasks(t, "task one")
+	require.Equal(t, 0, m.width, "fixture defaults width to 0")
+	out := m.View()
+	require.NotContains(t, out, "║", "width=0 must render single-pane (no double-line border)")
+}
+
+func TestTUI_NarrowWidthRendersSinglePane(t *testing.T) {
+	m, _, _ := setupModelWithInboxTasks(t, "task one")
+	m.width = 80
+	out := m.View()
+	require.NotContains(t, out, "║", "width<100 must render single-pane")
+}
+
+func TestTUI_NarrowWidthShowsListInBody(t *testing.T) {
+	m, _, _ := setupModelWithInboxTasks(t, "alpha", "beta")
+	m.width = 80
+	m.cursor = 0
+	out := m.View()
+	require.Contains(t, out, "alpha", "single-pane must show first task")
+	require.Contains(t, out, "beta", "single-pane must show second task")
+}
+
+func TestNameCache_LoadedMsgPopulatesModel(t *testing.T) {
+	m := newTestModel(t)
+	tid := id.New()
+	aid := id.New()
+	pid := id.New()
+	msg := nameCacheLoadedMsg{
+		tags:     map[id.ID]string{tid: "work"},
+		areas:    map[id.ID]string{aid: "home"},
+		projects: map[id.ID]string{pid: "todushka"},
+		headings: map[id.ID]string{},
+	}
+	m2, _ := m.Update(msg)
+	mm := m2.(Model)
+	require.Equal(t, "work", mm.tagNamesByID[tid])
+	require.Equal(t, "home", mm.areaNamesByID[aid])
+	require.Equal(t, "todushka", mm.projectNamesByID[pid])
+}
+
+func TestNameCache_FetchCmdEmitsMsg(t *testing.T) {
+	_, svc := newTestModelWithService(t)
+	ctx := context.Background()
+	a, err := svc.AddArea(ctx, "work")
+	require.NoError(t, err)
+	tg, err := svc.UpsertTag(ctx, "urgent")
+	require.NoError(t, err)
+	tk, err := svc.AddTask(ctx, app.AddTaskInput{
+		Title:  "t1",
+		AreaID: &a.ID,
+		Tags:   []id.ID{tg.ID},
+	})
+	require.NoError(t, err)
+
+	cmd := fetchNameCache(svc, []task.Task{tk})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	res, ok := msg.(nameCacheLoadedMsg)
+	require.True(t, ok)
+	require.Equal(t, "work", res.areas[a.ID])
+	require.Equal(t, "urgent", res.tags[tg.ID])
+}

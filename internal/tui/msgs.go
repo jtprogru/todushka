@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/jtprogru/todushka/internal/domain/id"
 	"github.com/jtprogru/todushka/internal/domain/task"
 )
 
@@ -65,4 +66,13 @@ func (l listKind) String() string {
 		return "Logbook"
 	}
 	return "?"
+}
+
+// nameCacheLoadedMsg carries names resolved by fetchNameCache.
+// Per-map keys are not exclusive — Update merges them additively into Model.
+type nameCacheLoadedMsg struct {
+	tags     map[id.ID]string
+	areas    map[id.ID]string
+	projects map[id.ID]string
+	headings map[id.ID]string
 }

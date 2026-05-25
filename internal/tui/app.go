@@ -38,6 +38,11 @@ type Model struct {
 	confirm     *confirmState
 	filterQuery string
 	filtering   bool
+
+	tagNamesByID     map[id.ID]string
+	areaNamesByID    map[id.ID]string
+	projectNamesByID map[id.ID]string
+	headingNamesByID map[id.ID]string
 }
 
 // allLists is the canonical order used by Tab/Shift+Tab cycling and the header.
@@ -49,13 +54,17 @@ func NewModel(svc *app.Service, theme Theme) Model {
 	ti.Placeholder = "what to do? — tokens: #tag @today @project !YYYY-MM-DD"
 	ti.CharLimit = 256
 	return Model{
-		service:    svc,
-		keys:       DefaultKeyMap(),
-		theme:      theme,
-		screen:     screenList,
-		activeList: listToday,
-		quickInput: ti,
-		selected:   make(map[id.ID]struct{}),
+		service:          svc,
+		keys:             DefaultKeyMap(),
+		theme:            theme,
+		screen:           screenList,
+		activeList:       listToday,
+		quickInput:       ti,
+		selected:         make(map[id.ID]struct{}),
+		tagNamesByID:     make(map[id.ID]string),
+		areaNamesByID:    make(map[id.ID]string),
+		projectNamesByID: make(map[id.ID]string),
+		headingNamesByID: make(map[id.ID]string),
 	}
 }
 
@@ -71,6 +80,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tasks = msg.tasks
 		if m.cursor >= len(m.tasks) {
 			m.cursor = max(0, len(m.tasks)-1)
+		}
+		return m, fetchNameCache(m.service, m.tasks)
+
+	case nameCacheLoadedMsg:
+		for k, v := range msg.tags {
+			m.tagNamesByID[k] = v
+		}
+		for k, v := range msg.areas {
+			m.areaNamesByID[k] = v
+		}
+		for k, v := range msg.projects {
+			m.projectNamesByID[k] = v
+		}
+		for k, v := range msg.headings {
+			m.headingNamesByID[k] = v
 		}
 		return m, nil
 
@@ -413,10 +437,28 @@ func (m Model) pinSelected() tea.Cmd {
 
 // View
 
+// viewBody dispatches between single-pane and dual-pane rendering.
+// Returns the body content (header and footer are wrapped separately by View).
+// When single-pane, viewBody equals viewList — preserves the legacy layout.
+func (m Model) viewBody() string {
+	if !isDualPane(m) {
+		return m.viewList()
+	}
+	listW, detailsW := paneWidths(m.width)
+	left := lipgloss.NewStyle().Width(listW).Render(m.viewList())
+	right := lipgloss.NewStyle().
+		Width(detailsW).
+		Border(lipgloss.DoubleBorder(), false, false, false, true).
+		BorderForeground(m.theme.Help.GetForeground()).
+		PaddingLeft(1).
+		Render(viewDetails(m, detailsW-2))
+	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+}
+
 func (m Model) View() string {
 	if m.confirm != nil {
 		modal := m.theme.Modal.Render(fmt.Sprintf("%s %d tasks? (y/n)", m.confirm.action.label(), len(m.confirm.ids)))
-		body := lipgloss.JoinVertical(lipgloss.Left, m.viewList(), modal)
+		body := lipgloss.JoinVertical(lipgloss.Left, m.viewBody(), modal)
 		return lipgloss.JoinVertical(lipgloss.Left, m.viewHeader(), body, m.viewFooter())
 	}
 	var body string
@@ -424,11 +466,11 @@ func (m Model) View() string {
 	case screenHelp:
 		body = m.viewHelp()
 	case screenQuickEntry:
-		body = lipgloss.JoinVertical(lipgloss.Left, m.viewList(), m.viewQuickEntry())
+		body = lipgloss.JoinVertical(lipgloss.Left, m.viewBody(), m.viewQuickEntry())
 	case screenEditor:
 		body = m.editor.View(m.theme, m.editorWidth())
 	default:
-		body = m.viewList()
+		body = m.viewBody()
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, m.viewHeader(), body, m.viewFooter())
 }
