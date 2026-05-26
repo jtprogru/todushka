@@ -174,12 +174,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		raw := msg.raw
 		svc := m.service
 		return m, func() tea.Msg {
-			_, err := svc.QuickEntry(context.Background(), raw)
-			if err != nil {
+			if _, err := svc.QuickEntry(context.Background(), raw); err != nil {
 				return errorMsg{err}
 			}
-			return nil
+			return quickEntryDoneMsg{}
 		}
+
+	case quickEntryDoneMsg:
+		return m, tea.Batch(m.loadCurrentList(), fetchListCounts(m.service))
 
 	case editorSavedMsg:
 		m.screen = screenList
@@ -387,10 +389,7 @@ func (m Model) handleQuickEntryKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.blockWriteIfReadOnly() {
 			return m, tea.Tick(statusFadeDuration, func(time.Time) tea.Msg { return clearStatusMsg{} })
 		}
-		return m, tea.Batch(
-			func() tea.Msg { return quickEntrySubmittedMsg{raw: raw} },
-			m.loadCurrentList(),
-		)
+		return m, func() tea.Msg { return quickEntrySubmittedMsg{raw: raw} }
 	default:
 		var cmd tea.Cmd
 		m.quickInput, cmd = m.quickInput.Update(msg)

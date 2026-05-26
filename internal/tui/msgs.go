@@ -17,6 +17,11 @@ type clearStatusMsg struct{}
 
 type quickEntrySubmittedMsg struct{ raw string }
 
+// quickEntryDoneMsg is emitted after QuickEntry's service write commits.
+// The Update handler chains loadCurrentList + fetchListCounts so the new
+// task is reflected in m.tasks without a tab switch.
+type quickEntryDoneMsg struct{}
+
 type screenKind int
 
 const (
