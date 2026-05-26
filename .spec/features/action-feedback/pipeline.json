@@ -1,0 +1,21 @@
+{
+  "feature": "action-feedback",
+  "phase": "done",
+  "created_at": "2026-05-26T11:18:10Z",
+  "current_artifact": null,
+  "history": [
+    {"phase": "explore", "artifact": ".spec/features/action-feedback/explore.md", "approved_at": "2026-05-26T11:23:58Z"},
+    {"phase": "requirements", "artifact": ".spec/features/action-feedback/requirements.md", "approved_at": "2026-05-26T11:28:41Z"},
+    {"phase": "design", "artifact": ".spec/features/action-feedback/design.md", "approved_at": "2026-05-26T12:07:51Z"},
+    {"phase": "task-plan", "artifact": ".spec/features/action-feedback/task-plan.md", "approved_at": "2026-05-26T12:10:12Z"},
+    {"phase": "implementation", "artifact": ".spec/features/action-feedback/implementation.md", "approved_at": "2026-05-26T13:23:44Z"},
+    {"phase": "review", "artifact": "/Users/jtprogru/Work/github/jtprogru/todushka/.spec/features/action-feedback/review.md", "approved_at": "2026-05-26T13:41:31Z"}
+  ],
+  "review_base_commit": "8885c9bec6b5933262ddd2f1f3c2c7e025d4a7f8",
+  "branch": "feature/action-feedback",
+  "worktree": null,
+  "last_completed_task": null,
+  "finish_action": null,
+  "finished_at": null,
+  "finish_base": null
+}

@@ -14,6 +14,101 @@ import (
 	"pgregory.net/rapid"
 )
 
+// TestTUI_SingleTaskDeleteWithConfirm verifies REQ-3.1: pressing 'd' on
+// the cursor task while ConfirmDelete=true installs the confirm modal
+// and does NOT splice or write.
+func TestTUI_SingleTaskDeleteWithConfirm(t *testing.T) {
+	m, svc, tasks := setupModelWithInboxTasks(t, "task one", "task two")
+	require.True(t, m.config.ConfirmDelete)
+
+	m2, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	mm := m2.(Model)
+	require.NotNil(t, mm.confirm, "confirm modal must be installed")
+	require.Equal(t, bulkActionDelete, mm.confirm.action)
+	require.Equal(t, []id.ID{tasks[0].ID}, mm.confirm.ids)
+	require.Nil(t, cmd, "no Cmd issued until user confirms")
+	require.Len(t, mm.tasks, 2, "tasks unchanged in m.tasks until confirm")
+
+	got, err := svc.Repo().TaskGet(context.Background(), tasks[0].ID)
+	require.NoError(t, err)
+	require.Nil(t, got.DeletedAt, "task must not be deleted yet")
+}
+
+// TestTUI_SingleTaskDeleteConfirmYes verifies REQ-3.3: pressing 'y'
+// while a single-task delete confirm is active splices m.tasks AND
+// issues the async service write.
+func TestTUI_SingleTaskDeleteConfirmYes(t *testing.T) {
+	m, svc, tasks := setupModelWithInboxTasks(t, "task one", "task two")
+
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	mm := m2.(Model)
+	require.NotNil(t, mm.confirm)
+
+	m3, cmd := mm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	mm = m3.(Model)
+	require.Nil(t, mm.confirm, "modal must close on 'y'")
+	require.NotNil(t, cmd, "service write Cmd must be returned")
+	require.Len(t, mm.tasks, 1, "task spliced out optimistically")
+	require.Equal(t, tasks[1].ID, mm.tasks[0].ID)
+
+	_ = cmd()
+	inbox, err := svc.ListInbox(context.Background())
+	require.NoError(t, err)
+	require.Len(t, inbox, 1)
+	require.Equal(t, tasks[1].ID, inbox[0].ID)
+}
+
+// TestTUI_SingleTaskDeleteConfirmNo verifies REQ-3.4: any non-'y' key
+// dismisses the modal without writing or splicing.
+func TestTUI_SingleTaskDeleteConfirmNo(t *testing.T) {
+	m, svc, tasks := setupModelWithInboxTasks(t, "task one", "task two")
+
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	mm := m2.(Model)
+	require.NotNil(t, mm.confirm)
+
+	m3, cmd := mm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	mm = m3.(Model)
+	require.Nil(t, mm.confirm, "modal must close on 'n'")
+	require.Nil(t, cmd, "no service write on dismiss")
+	require.Len(t, mm.tasks, 2, "tasks unchanged on dismiss")
+
+	got, err := svc.Repo().TaskGet(context.Background(), tasks[0].ID)
+	require.NoError(t, err)
+	require.Nil(t, got.DeletedAt, "task must not be deleted")
+}
+
+// TestTUI_DeleteWithoutConfirmWhenDisabled verifies REQ-3.2: with
+// ConfirmDelete=false, pressing 'd' splices and writes immediately
+// without a modal.
+func TestTUI_DeleteWithoutConfirmWhenDisabled(t *testing.T) {
+	m, svc, tasks := setupModelWithInboxTasks(t, "task one", "task two")
+	m.config.ConfirmDelete = false
+
+	m2, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	mm := m2.(Model)
+	require.Nil(t, mm.confirm, "no modal when ConfirmDelete=false")
+	require.NotNil(t, cmd)
+	require.Len(t, mm.tasks, 1, "task spliced out optimistically")
+
+	_ = cmd()
+	inbox, err := svc.ListInbox(context.Background())
+	require.NoError(t, err)
+	require.Len(t, inbox, 1)
+	require.Equal(t, tasks[1].ID, inbox[0].ID)
+}
+
+// TestTUI_DeleteConfirmBlockedInReadOnly verifies the RO guard
+// (preserved from v0.7.0): no modal opens in read-only mode.
+func TestTUI_DeleteConfirmBlockedInReadOnly(t *testing.T) {
+	m, _, _ := setupModelWithInboxTasks(t, "task one")
+	m.readOnly = true
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	mm := m2.(Model)
+	require.Nil(t, mm.confirm, "confirm modal must NOT open in RO mode")
+	require.Contains(t, mm.statusMsg, "read-only")
+}
+
 func TestBulk_EmptyDispatchesPerCursor(t *testing.T) {
 	m, svc, tasks := setupModelWithInboxTasks(t, "x", "y")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
@@ -178,6 +273,7 @@ func TestProp_EmptySelectionEquivCursor(t *testing.T) {
 					titles[i] = fmt.Sprintf("task-%d", i)
 				}
 				m, svc, tasks := setupRapidModel(rt, titles...)
+				m.config.ConfirmDelete = false
 				cursorIdx := rapid.IntRange(0, n-1).Draw(rt, "cursor")
 				m.cursor = cursorIdx
 				require.Empty(rt, m.selected)

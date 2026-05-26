@@ -7,6 +7,7 @@ type AppConfig struct {
 	ListPaneShare        float64 `yaml:"list_pane_share"`
 	BulkConfirmThreshold int     `yaml:"bulk_confirm_threshold"`
 	NotesMaxLines        int     `yaml:"notes_max_lines"`
+	ConfirmDelete        bool    `yaml:"confirm_delete"`
 }
 
 // Defaults returns the built-in fallback values.
@@ -17,6 +18,7 @@ func Defaults() AppConfig {
 		ListPaneShare:        0.45,
 		BulkConfirmThreshold: 5,
 		NotesMaxLines:        8,
+		ConfirmDelete:        true,
 	}
 }
 
