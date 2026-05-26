@@ -15,7 +15,7 @@
   "branch": "feature/action-feedback",
   "worktree": null,
   "last_completed_task": null,
-  "finish_action": null,
-  "finished_at": null,
+  "finish_action": "pr",
+  "finished_at": "2026-05-26T13:54:08Z",
   "finish_base": null
 }
