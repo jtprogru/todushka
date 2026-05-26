@@ -100,6 +100,83 @@ func TestTUI_QuickEntryHotkeyOpensModal(t *testing.T) {
 	require.Equal(t, screenQuickEntry, m2.(Model).screen)
 }
 
+// TestTUI_QuickEntrySubmitReloadsList verifies that after submitting a
+// new task via quick entry, m.tasks contains it without a tab switch.
+// Pre-fix: tea.Batch ran write + load concurrently and the load
+// sometimes finished before the write commit, leaving the list stale.
+// Now: write Cmd returns quickEntryDoneMsg, whose handler chains the
+// reload — guaranteed ordering, no race.
+func TestTUI_QuickEntrySubmitReloadsList(t *testing.T) {
+	m, svc, _ := setupModelWithInboxTasks(t, "existing one")
+
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	mm := m2.(Model)
+	require.Equal(t, screenQuickEntry, mm.screen)
+	mm.quickInput.SetValue("freshly added")
+
+	m3, cmd := mm.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm = m3.(Model)
+	require.Equal(t, screenList, mm.screen)
+	require.NotNil(t, cmd, "submit must produce a Cmd")
+
+	// First Cmd emits quickEntrySubmittedMsg (key handler → submit message).
+	submitMsg := cmd()
+	require.IsType(t, quickEntrySubmittedMsg{}, submitMsg)
+
+	// Submit handler issues a Cmd that performs the QuickEntry write and
+	// produces quickEntryDoneMsg only after it commits — no concurrent reload.
+	m4, writeCmd := mm.Update(submitMsg)
+	mm = m4.(Model)
+	require.NotNil(t, writeCmd)
+	doneMsg := writeCmd()
+	require.IsType(t, quickEntryDoneMsg{}, doneMsg, "write Cmd must signal completion only after commit")
+
+	// Done-msg handler must chain reload + counts via tea.Batch.
+	m5, reloadCmd := mm.Update(doneMsg)
+	mm = m5.(Model)
+	require.NotNil(t, reloadCmd, "done msg handler must chain loadCurrentList")
+
+	// Drain the batched commands until the tasks-loaded message surfaces.
+	require.Eventually(t, func() bool {
+		msg := reloadCmd()
+		if loaded, ok := msg.(tasksLoadedMsg); ok {
+			mm.tasks = loaded.tasks
+			return true
+		}
+		// If we got a batch of msgs, fan them out and look for tasksLoadedMsg.
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			for _, c := range batch {
+				if c == nil {
+					continue
+				}
+				if l, ok := c().(tasksLoadedMsg); ok {
+					mm.tasks = l.tasks
+					return true
+				}
+			}
+		}
+		return false
+	}, 2*time.Second, 10*time.Millisecond)
+
+	titles := make([]string, 0, len(mm.tasks))
+	for _, t := range mm.tasks {
+		titles = append(titles, t.Title)
+	}
+	require.Contains(t, titles, "freshly added", "new task must appear in m.tasks without a tab switch")
+
+	// Sanity: it's also in storage.
+	inbox, err := svc.ListInbox(context.Background())
+	require.NoError(t, err)
+	var found bool
+	for _, t := range inbox {
+		if t.Title == "freshly added" {
+			found = true
+			break
+		}
+	}
+	require.True(t, found)
+}
+
 func TestTUI_QuickEntryEscapeCloses(t *testing.T) {
 	m := newTestModel(t)
 	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
