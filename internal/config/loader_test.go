@@ -136,6 +136,54 @@ func TestLoad_InvalidEnvFallsBackToFile(t *testing.T) {
 	require.True(t, found, "expected a warning about invalid env var, got %v", warns)
 }
 
+func TestLoad_ConfirmDeleteFromEnv(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("theme: macchiato\n"), 0600))
+
+	t.Run("true keeps true", func(t *testing.T) {
+		cfg, _, err := Load(path, mockEnv(map[string]string{"TODUSHKA_CONFIRM_DELETE": "true"}))
+		require.NoError(t, err)
+		require.True(t, cfg.ConfirmDelete)
+	})
+	t.Run("false disables", func(t *testing.T) {
+		cfg, _, err := Load(path, mockEnv(map[string]string{"TODUSHKA_CONFIRM_DELETE": "false"}))
+		require.NoError(t, err)
+		require.False(t, cfg.ConfirmDelete)
+	})
+	t.Run("invalid value warns and preserves default", func(t *testing.T) {
+		cfg, warns, err := Load(path, mockEnv(map[string]string{"TODUSHKA_CONFIRM_DELETE": "bogus"}))
+		require.NoError(t, err)
+		require.True(t, cfg.ConfirmDelete, "invalid value must not flip the bool")
+		var found bool
+		for _, w := range warns {
+			if strings.Contains(w, "TODUSHKA_CONFIRM_DELETE") {
+				found = true
+				break
+			}
+		}
+		require.True(t, found, "expected a warning about invalid env var, got %v", warns)
+	})
+}
+
+func TestLoad_ConfirmDeleteFromYAML(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("confirm_delete: false\n"), 0600))
+	cfg, _, err := Load(path, mockEnv(nil))
+	require.NoError(t, err)
+	require.False(t, cfg.ConfirmDelete)
+}
+
+func TestLoad_ConfirmDeleteMissingFromYAMLDefaultsTrue(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("theme: macchiato\n"), 0600))
+	cfg, _, err := Load(path, mockEnv(nil))
+	require.NoError(t, err)
+	require.True(t, cfg.ConfirmDelete)
+}
+
 func TestResolvePath_FlagAbsolute(t *testing.T) {
 	resolved, err := ResolvePath(mockEnv(nil), "/abs/path.yaml")
 	require.NoError(t, err)

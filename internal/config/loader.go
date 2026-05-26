@@ -61,12 +61,10 @@ func loadFromFile(path string) (AppConfig, []string, error) {
 		}
 		return Defaults(), nil, err
 	}
-	var cfg AppConfig
+	cfg := Defaults()
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return Defaults(), nil, fmt.Errorf("parse %s: %w", path, err)
 	}
-	// Merge with defaults: any zero-valued field is replaced by default below
-	// in applyEnv → Validate. This keeps semantic "absent in YAML == use default".
 	return cfg, nil, nil
 }
 
@@ -95,6 +93,10 @@ bulk_confirm_threshold: 5
 
 # Maximum lines of task notes displayed in the details pane.
 notes_max_lines: 8
+
+# Show a confirmation modal before deleting a single task. Bulk deletes
+# (>= bulk_confirm_threshold) always require confirmation regardless.
+confirm_delete: true
 `
 }
 
@@ -129,6 +131,13 @@ func applyEnv(cfg AppConfig, env Env) (AppConfig, []string) {
 			cfg.NotesMaxLines = n
 		} else {
 			warns = append(warns, "TODUSHKA_NOTES_MAX_LINES="+v+" not an integer")
+		}
+	}
+	if v := env("TODUSHKA_CONFIRM_DELETE"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			cfg.ConfirmDelete = b
+		} else {
+			warns = append(warns, "TODUSHKA_CONFIRM_DELETE="+v+" not a bool")
 		}
 	}
 	return cfg, warns

@@ -39,6 +39,15 @@ type bulkResultMsg struct {
 	fatal     bool
 }
 
+// singleActionDoneMsg is emitted by per-cursor write Cmds after the service
+// call returns. Success → reload chained by handler; err != nil → status
+// fade only (no reload — keeps the optimistic splice visible until manual r).
+type singleActionDoneMsg struct {
+	action bulkAction
+	tid    id.ID
+	err    error
+}
+
 type listKind int
 
 const (

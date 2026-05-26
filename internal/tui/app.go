@@ -151,6 +151,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			tea.Tick(statusFadeDuration, func(time.Time) tea.Msg { return clearStatusMsg{} }),
 		)
 
+	case singleActionDoneMsg:
+		if msg.err != nil {
+			m.statusMsg = msg.err.Error()
+			m.statusUntil = time.Now().Add(statusFadeDuration)
+			return m, tea.Tick(statusFadeDuration, func(time.Time) tea.Msg { return clearStatusMsg{} })
+		}
+		return m, tea.Batch(m.loadCurrentList(), fetchListCounts(m.service))
+
 	case errorMsg:
 		m.statusMsg = msg.err.Error()
 		m.statusUntil = time.Now().Add(statusFadeDuration)
@@ -434,63 +442,101 @@ func (m Model) selectedTask() *task.Task {
 	return &m.tasks[m.cursor]
 }
 
-func (m Model) completeSelected() tea.Cmd {
+func (m Model) completeSelected() (Model, tea.Cmd) {
 	sel := m.selectedTask()
 	if sel == nil {
-		return nil
+		return m, nil
 	}
 	svc := m.service
 	tid := sel.ID
-	return func() tea.Msg {
+	now := time.Now()
+	for i := range m.tasks {
+		if m.tasks[i].ID == tid {
+			m.tasks[i].Status = task.StatusCompleted
+			m.tasks[i].CompletedAt = &now
+			m.tasks[i].CancelledAt = nil
+			break
+		}
+	}
+	return m, func() tea.Msg {
 		if _, err := svc.CompleteTask(context.Background(), tid); err != nil {
-			return errorMsg{err}
+			return singleActionDoneMsg{action: bulkActionComplete, tid: tid, err: err}
 		}
-		return nil
+		return singleActionDoneMsg{action: bulkActionComplete, tid: tid}
 	}
 }
 
-func (m Model) cancelSelected() tea.Cmd {
+func (m Model) cancelSelected() (Model, tea.Cmd) {
 	sel := m.selectedTask()
 	if sel == nil {
-		return nil
+		return m, nil
 	}
 	svc := m.service
 	tid := sel.ID
-	return func() tea.Msg {
+	now := time.Now()
+	for i := range m.tasks {
+		if m.tasks[i].ID == tid {
+			m.tasks[i].Status = task.StatusCancelled
+			m.tasks[i].CancelledAt = &now
+			m.tasks[i].CompletedAt = nil
+			break
+		}
+	}
+	return m, func() tea.Msg {
 		if err := svc.CancelTask(context.Background(), tid); err != nil {
-			return errorMsg{err}
+			return singleActionDoneMsg{action: bulkActionCancel, tid: tid, err: err}
 		}
-		return nil
+		return singleActionDoneMsg{action: bulkActionCancel, tid: tid}
 	}
 }
 
-func (m Model) deleteSelected() tea.Cmd {
+func (m Model) deleteSelected() (Model, tea.Cmd) {
 	sel := m.selectedTask()
 	if sel == nil {
-		return nil
+		return m, nil
 	}
 	svc := m.service
 	tid := sel.ID
-	return func() tea.Msg {
+	for i := range m.tasks {
+		if m.tasks[i].ID == tid {
+			m.tasks = append(m.tasks[:i], m.tasks[i+1:]...)
+			break
+		}
+	}
+	if m.cursor >= len(m.tasks) {
+		if len(m.tasks) == 0 {
+			m.cursor = 0
+		} else {
+			m.cursor = len(m.tasks) - 1
+		}
+	}
+	return m, func() tea.Msg {
 		if err := svc.DeleteTask(context.Background(), tid, false); err != nil {
-			return errorMsg{err}
+			return singleActionDoneMsg{action: bulkActionDelete, tid: tid, err: err}
 		}
-		return nil
+		return singleActionDoneMsg{action: bulkActionDelete, tid: tid}
 	}
 }
 
-func (m Model) pinSelected() tea.Cmd {
+func (m Model) pinSelected() (Model, tea.Cmd) {
 	sel := m.selectedTask()
 	if sel == nil {
-		return nil
+		return m, nil
 	}
 	svc := m.service
 	tid := sel.ID
-	return func() tea.Msg {
-		if err := svc.PinToToday(context.Background(), tid); err != nil {
-			return errorMsg{err}
+	d := task.NewDate(time.Now())
+	for i := range m.tasks {
+		if m.tasks[i].ID == tid {
+			m.tasks[i].PinnedToday = &d
+			break
 		}
-		return nil
+	}
+	return m, func() tea.Msg {
+		if err := svc.PinToToday(context.Background(), tid); err != nil {
+			return singleActionDoneMsg{action: bulkActionPin, tid: tid, err: err}
+		}
+		return singleActionDoneMsg{action: bulkActionPin, tid: tid}
 	}
 }
 
@@ -592,6 +638,13 @@ func (m Model) viewList() string {
 		if i == m.cursor {
 			marker = m.theme.Selected.Render("> ")
 		}
+		icon := "  "
+		switch t.Status {
+		case task.StatusCompleted:
+			icon = m.theme.StatusInfo.Render("✓ ")
+		case task.StatusCancelled:
+			icon = m.theme.StatusError.Render("✗ ")
+		}
 		title := t.Title
 		dates := ""
 		if t.StartDate != nil {
@@ -601,8 +654,15 @@ func (m Model) viewList() string {
 			dl := " due:" + t.Deadline.Format("2006-01-02")
 			dates += m.theme.Deadline.Render(dl)
 		}
+		if t.Status == task.StatusCompleted || t.Status == task.StatusCancelled {
+			done := lipgloss.NewStyle().Strikethrough(true).Faint(true)
+			title = done.Render(title)
+			if dates != "" {
+				dates = done.Render(dates)
+			}
+		}
 		short := m.theme.Dim.Render(id.Short(t.ID))
-		lines = append(lines, fmt.Sprintf("%s%s%s  %s%s", prefix, marker, short, title, dates))
+		lines = append(lines, fmt.Sprintf("%s%s%s%s  %s%s", prefix, marker, icon, short, title, dates))
 	}
 	return strings.Join(lines, "\n")
 }

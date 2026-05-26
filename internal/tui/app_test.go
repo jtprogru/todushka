@@ -9,11 +9,13 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/jtprogru/todushka/internal/app"
 	"github.com/jtprogru/todushka/internal/config"
 	"github.com/jtprogru/todushka/internal/domain/id"
 	"github.com/jtprogru/todushka/internal/domain/task"
 	"github.com/jtprogru/todushka/internal/storage/fakes"
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/require"
 	"pgregory.net/rapid"
 )
@@ -261,6 +263,7 @@ func TestTUI_CancelCursorTaskWhenNoSelection(t *testing.T) {
 
 func TestTUI_DeleteCursorTaskWhenNoSelection(t *testing.T) {
 	m, svc, tasks := setupModelWithInboxTasks(t, "task one", "task two")
+	m.config.ConfirmDelete = false
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
 	require.NotNil(t, cmd)
@@ -270,6 +273,38 @@ func TestTUI_DeleteCursorTaskWhenNoSelection(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, inbox, 1, "deleted task must be filtered out of inbox")
 	require.Equal(t, tasks[1].ID, inbox[0].ID, "remaining task is the one we did not delete")
+}
+
+// TestTUI_ViewListRendersStatusIcons verifies REQ-2.5..2.7: viewList
+// renders ✓ for completed, ✗ for cancelled, and two spaces for open.
+// Completed/cancelled rows also carry strikethrough styling on the title
+// (verified by the presence of the ANSI strikethrough code under a forced
+// TrueColor renderer profile, since go test runs without a TTY by default).
+func TestTUI_ViewListRendersStatusIcons(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
+
+	m := newTestModel(t)
+	now := time.Now()
+	m.tasks = []task.Task{
+		{ID: id.New(), Title: "open task", Status: task.StatusOpen, CreatedAt: now, UpdatedAt: now},
+		{ID: id.New(), Title: "done task", Status: task.StatusCompleted, CompletedAt: &now, CreatedAt: now, UpdatedAt: now},
+		{ID: id.New(), Title: "killed task", Status: task.StatusCancelled, CancelledAt: &now, CreatedAt: now, UpdatedAt: now},
+	}
+	m.activeList = listInbox
+
+	out := m.viewList()
+	lines := strings.Split(out, "\n")
+	require.Len(t, lines, 3)
+
+	require.Contains(t, lines[1], "✓", "completed row must contain checkmark")
+	require.Contains(t, lines[2], "✗", "cancelled row must contain cross")
+	require.NotContains(t, lines[0], "✓", "open row must NOT carry checkmark")
+	require.NotContains(t, lines[0], "✗", "open row must NOT carry cross")
+
+	// ANSI escape \x1b[9m enables strikethrough in lipgloss output.
+	require.Contains(t, lines[1], "\x1b[9", "completed title must be rendered with strikethrough ANSI code")
+	require.Contains(t, lines[2], "\x1b[9", "cancelled title must be rendered with strikethrough ANSI code")
 }
 
 func TestTUI_PinCursorTaskWhenNoSelection(t *testing.T) {

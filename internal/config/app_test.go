@@ -14,6 +14,11 @@ func TestDefaults_AreValid(t *testing.T) {
 	require.InDelta(t, 0.45, c.ListPaneShare, 1e-9)
 	require.Equal(t, 5, c.BulkConfirmThreshold)
 	require.Equal(t, 8, c.NotesMaxLines)
+	require.True(t, c.ConfirmDelete)
+}
+
+func TestDefaults_ConfirmDeleteTrue(t *testing.T) {
+	require.True(t, Defaults().ConfirmDelete)
 }
 
 func TestValidate_ThemeFallback(t *testing.T) {
