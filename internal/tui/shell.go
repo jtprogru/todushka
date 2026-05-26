@@ -27,6 +27,7 @@ const (
 	modeConfirm
 	modeEditor
 	modeHelp
+	modeReadOnly
 )
 
 // modeLabel returns the human-readable label used inside the footer chip
@@ -45,13 +46,15 @@ func (m shellMode) modeLabel() string {
 		return "EDITOR"
 	case modeHelp:
 		return "HELP"
+	case modeReadOnly:
+		return "READ-ONLY"
 	}
 	return "?"
 }
 
 // currentMode determines the active mode following the priority order:
-// HELP > EDITOR > CONFIRM > FILTER > SELECT > NORMAL. This priority is
-// observable via the footer chip and via key hints.
+// HELP > EDITOR > CONFIRM > FILTER > SELECT > READ-ONLY > NORMAL. This
+// priority is observable via the footer chip and via key hints.
 func currentMode(m Model) shellMode {
 	switch {
 	case m.screen == screenHelp:
@@ -64,6 +67,8 @@ func currentMode(m Model) shellMode {
 		return modeFilter
 	case len(m.selected) > 0:
 		return modeSelect
+	case m.readOnly:
+		return modeReadOnly
 	default:
 		return modeNormal
 	}
@@ -86,6 +91,8 @@ func modeKeyHints(mode shellMode) []string {
 		return []string{"Tab: next", "Shift+Tab: prev", "Ctrl+S: save", "esc: cancel"}
 	case modeHelp:
 		return []string{"?: close"}
+	case modeReadOnly:
+		return []string{"/: filter", "↵: view", "?: help", "q: quit"}
 	}
 	return nil
 }

@@ -43,8 +43,21 @@ var allBuckets = []string{
 }
 
 type Repo struct {
-	db   *bolt.DB
-	path string
+	db       *bolt.DB
+	path     string
+	readOnly bool
+}
+
+// ReadOnly reports whether the repo was opened in read-only mode.
+func (r *Repo) ReadOnly() bool { return r.readOnly }
+
+// checkWritable returns storage.ErrReadOnly when the repo is read-only.
+// Called at the start of every write method via a centralized guard.
+func (r *Repo) checkWritable() error {
+	if r.readOnly {
+		return storage.ErrReadOnly
+	}
+	return nil
 }
 
 // Open opens (or creates) a bbolt database file at path and runs all pending
@@ -63,7 +76,7 @@ func Open(path string) (*Repo, error) {
 		}
 		return nil, fmt.Errorf("bbolt: open: %w", err)
 	}
-	r := &Repo{db: db, path: path}
+	r := &Repo{db: db, path: path, readOnly: false}
 	if err := r.ensureBuckets(); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -82,6 +95,26 @@ func Open(path string) (*Repo, error) {
 		return nil, err
 	}
 	return r, nil
+}
+
+// OpenReadOnly opens the database in shared read-only mode. Multiple
+// read-only opens of the same path are allowed by bbolt's lock semantics.
+// Returns an error if the file does not exist (cannot create in RO mode).
+func OpenReadOnly(path string) (*Repo, error) {
+	if _, err := os.Stat(path); err != nil {
+		return nil, fmt.Errorf("bbolt: open read-only: %w", err)
+	}
+	db, err := bolt.Open(path, 0o600, &bolt.Options{
+		Timeout:  openTimeout,
+		ReadOnly: true,
+	})
+	if err != nil {
+		if errors.Is(err, bolterrors.ErrTimeout) {
+			return nil, storage.ErrDatabaseLocked
+		}
+		return nil, fmt.Errorf("bbolt: open read-only: %w", err)
+	}
+	return &Repo{db: db, path: path, readOnly: true}, nil
 }
 
 func (r *Repo) Close() error { return r.db.Close() }
@@ -120,6 +153,9 @@ func (r *Repo) SchemaVersion(_ context.Context) (int, error) {
 }
 
 func (r *Repo) Migrate(_ context.Context, target int) error {
+	if r.readOnly {
+		return nil // No-op in read-only mode (REQ-2.5; RO trusts primary writer)
+	}
 	if target > storage.CurrentSchemaVersion {
 		return storage.ErrSchemaTooNew
 	}
@@ -180,6 +216,9 @@ func getJSON[T any](bkt *bolt.Bucket, key []byte) (T, bool, error) {
 // Tasks
 
 func (r *Repo) TaskCreate(_ context.Context, t task.Task) error {
+	if err := r.checkWritable(); err != nil {
+		return err
+	}
 	return r.db.Update(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket([]byte(bktTasks))
 		if bkt.Get([]byte(t.ID)) != nil {
@@ -207,6 +246,9 @@ func (r *Repo) TaskGet(_ context.Context, taskID id.ID) (task.Task, error) {
 }
 
 func (r *Repo) TaskUpdate(_ context.Context, t task.Task) error {
+	if err := r.checkWritable(); err != nil {
+		return err
+	}
 	return r.db.Update(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket([]byte(bktTasks))
 		if bkt.Get([]byte(t.ID)) == nil {
@@ -217,6 +259,9 @@ func (r *Repo) TaskUpdate(_ context.Context, t task.Task) error {
 }
 
 func (r *Repo) TaskDelete(_ context.Context, taskID id.ID, soft bool) error {
+	if err := r.checkWritable(); err != nil {
+		return err
+	}
 	return r.db.Update(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket([]byte(bktTasks))
 		raw := bkt.Get([]byte(taskID))
@@ -342,6 +387,9 @@ func idMatchesShort(full, pfx string) bool {
 // Projects
 
 func (r *Repo) ProjectCreate(_ context.Context, p project.Project) error {
+	if err := r.checkWritable(); err != nil {
+		return err
+	}
 	return r.db.Update(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket([]byte(bktProjects))
 		if bkt.Get([]byte(p.ID)) != nil {
@@ -369,6 +417,9 @@ func (r *Repo) ProjectGet(_ context.Context, pid id.ID) (project.Project, error)
 }
 
 func (r *Repo) ProjectUpdate(_ context.Context, p project.Project) error {
+	if err := r.checkWritable(); err != nil {
+		return err
+	}
 	return r.db.Update(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket([]byte(bktProjects))
 		if bkt.Get([]byte(p.ID)) == nil {
@@ -379,6 +430,9 @@ func (r *Repo) ProjectUpdate(_ context.Context, p project.Project) error {
 }
 
 func (r *Repo) ProjectDelete(_ context.Context, pid id.ID, soft bool) error {
+	if err := r.checkWritable(); err != nil {
+		return err
+	}
 	return r.db.Update(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket([]byte(bktProjects))
 		raw := bkt.Get([]byte(pid))
@@ -455,6 +509,9 @@ func (r *Repo) ProjectFindByName(_ context.Context, name string) ([]project.Proj
 }
 
 func (r *Repo) HeadingCreate(_ context.Context, h project.Heading) error {
+	if err := r.checkWritable(); err != nil {
+		return err
+	}
 	return r.db.Update(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket([]byte(bktHeadings))
 		if bkt.Get([]byte(h.ID)) != nil {
@@ -465,6 +522,9 @@ func (r *Repo) HeadingCreate(_ context.Context, h project.Heading) error {
 }
 
 func (r *Repo) HeadingUpdate(_ context.Context, h project.Heading) error {
+	if err := r.checkWritable(); err != nil {
+		return err
+	}
 	return r.db.Update(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket([]byte(bktHeadings))
 		if bkt.Get([]byte(h.ID)) == nil {
@@ -475,6 +535,9 @@ func (r *Repo) HeadingUpdate(_ context.Context, h project.Heading) error {
 }
 
 func (r *Repo) HeadingDelete(_ context.Context, hid id.ID) error {
+	if err := r.checkWritable(); err != nil {
+		return err
+	}
 	return r.db.Update(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket([]byte(bktHeadings))
 		if bkt.Get([]byte(hid)) == nil {
@@ -505,6 +568,9 @@ func (r *Repo) HeadingList(_ context.Context, projectID id.ID) ([]project.Headin
 // Areas
 
 func (r *Repo) AreaCreate(_ context.Context, a area.Area) error {
+	if err := r.checkWritable(); err != nil {
+		return err
+	}
 	return r.db.Update(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket([]byte(bktAreas))
 		idx := tx.Bucket([]byte(bktIdxAreaByNorm))
@@ -556,6 +622,9 @@ func (r *Repo) AreaList(_ context.Context) ([]area.Area, error) {
 }
 
 func (r *Repo) AreaUpdate(_ context.Context, a area.Area) error {
+	if err := r.checkWritable(); err != nil {
+		return err
+	}
 	return r.db.Update(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket([]byte(bktAreas))
 		idx := tx.Bucket([]byte(bktIdxAreaByNorm))
@@ -583,6 +652,9 @@ func (r *Repo) AreaUpdate(_ context.Context, a area.Area) error {
 }
 
 func (r *Repo) AreaDelete(_ context.Context, aid id.ID, soft bool) error {
+	if err := r.checkWritable(); err != nil {
+		return err
+	}
 	return r.db.Update(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket([]byte(bktAreas))
 		idx := tx.Bucket([]byte(bktIdxAreaByNorm))
@@ -630,6 +702,9 @@ func (r *Repo) AreaFindByNormalized(_ context.Context, normalized string) (area.
 // Tags
 
 func (r *Repo) TagCreate(_ context.Context, t tag.Tag) error {
+	if err := r.checkWritable(); err != nil {
+		return err
+	}
 	return r.db.Update(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket([]byte(bktTags))
 		idx := tx.Bucket([]byte(bktIdxTagByNorm))
@@ -647,6 +722,9 @@ func (r *Repo) TagCreate(_ context.Context, t tag.Tag) error {
 }
 
 func (r *Repo) TagUpsert(_ context.Context, name string) (tag.Tag, error) {
+	if err := r.checkWritable(); err != nil {
+		return tag.Tag{}, err
+	}
 	norm := tag.Normalize(name)
 	if norm == "" {
 		return tag.Tag{}, tag.ErrEmptyName
@@ -710,6 +788,9 @@ func (r *Repo) TagList(_ context.Context) ([]tag.Tag, error) {
 }
 
 func (r *Repo) TagRename(_ context.Context, tid id.ID, newName string) error {
+	if err := r.checkWritable(); err != nil {
+		return err
+	}
 	newNorm := tag.Normalize(newName)
 	if newNorm == "" {
 		return tag.ErrEmptyName
@@ -742,6 +823,9 @@ func (r *Repo) TagRename(_ context.Context, tid id.ID, newName string) error {
 }
 
 func (r *Repo) TagDelete(_ context.Context, tid id.ID) error {
+	if err := r.checkWritable(); err != nil {
+		return err
+	}
 	return r.db.Update(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket([]byte(bktTags))
 		idx := tx.Bucket([]byte(bktIdxTagByNorm))

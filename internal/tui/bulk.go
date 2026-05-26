@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jtprogru/todushka/internal/app"
@@ -43,6 +44,11 @@ func (a bulkAction) label() string {
 // back to per-cursor; 1..m.config.BulkConfirmThreshold-1 runs immediately;
 // >=threshold installs a confirm modal.
 func dispatch(m Model, action bulkAction) (Model, tea.Cmd) {
+	if m.readOnly {
+		m.statusMsg = "read-only mode: writes disabled"
+		m.statusUntil = time.Now().Add(statusFadeDuration)
+		return m, tea.Tick(statusFadeDuration, func(time.Time) tea.Msg { return clearStatusMsg{} })
+	}
 	if len(m.selected) == 0 {
 		return m, perCursorCmd(m, action)
 	}

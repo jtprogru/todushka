@@ -19,6 +19,7 @@ type Deps struct {
 	Stdin     io.Reader
 	Env       func(string) string
 	Config    config.AppConfig                           // resolved at runtime by root PersistentPreRunE
+	ReadOnly  bool                                       // set by root PersistentPreRunE from --readonly flag
 	LaunchTUI func(*app.Service, config.AppConfig) error // returns an error to surface to main
 }
 

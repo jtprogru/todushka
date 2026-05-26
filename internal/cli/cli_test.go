@@ -12,6 +12,7 @@ import (
 	"github.com/jtprogru/todushka/internal/domain/id"
 	"github.com/jtprogru/todushka/internal/storage/fakes"
 	"github.com/stretchr/testify/require"
+	"pgregory.net/rapid"
 )
 
 type fixedClock struct{ now time.Time }
@@ -105,6 +106,55 @@ func TestCLI_ImportRequiresYes(t *testing.T) {
 	err := execute(t, deps, "import", "--json", "/nonexistent")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "--yes")
+}
+
+func TestCLI_ReadOnlyFlagDefaultFalse(t *testing.T) {
+	deps, _, _ := newTestDeps(t, nil)
+	root := NewRootCmd(deps)
+	root.SetArgs([]string{})
+	require.NoError(t, root.ExecuteContext(context.Background()))
+	got, err := root.PersistentFlags().GetBool("readonly")
+	require.NoError(t, err)
+	require.False(t, got)
+}
+
+func TestCLI_ReadOnlyFlagParsed(t *testing.T) {
+	deps, _, _ := newTestDeps(t, nil)
+	root := NewRootCmd(deps)
+	root.SetArgs([]string{"--readonly"})
+	require.NoError(t, root.ExecuteContext(context.Background()))
+	got, err := root.PersistentFlags().GetBool("readonly")
+	require.NoError(t, err)
+	require.True(t, got)
+}
+
+func TestCLI_ReadOnlyAliasRO(t *testing.T) {
+	deps, _, _ := newTestDeps(t, nil)
+	root := NewRootCmd(deps)
+	root.SetArgs([]string{"--ro"})
+	require.NoError(t, root.ExecuteContext(context.Background()))
+	got, err := root.PersistentFlags().GetBool("ro")
+	require.NoError(t, err)
+	require.True(t, got)
+	gotMain, err := root.PersistentFlags().GetBool("readonly")
+	require.NoError(t, err)
+	require.True(t, gotMain, "--ro alias should also flip --readonly's bound bool")
+}
+
+// TestProp_CLI_ReadOnlyFlagAlias verifies CP-14: --readonly and --ro
+// are observably equivalent — either spelling flips the bound bool
+// behind --readonly.
+func TestProp_CLI_ReadOnlyFlagAlias(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		flag := rapid.SampledFrom([]string{"--readonly", "--ro"}).Draw(rt, "flag")
+		deps, _, _ := newTestDeps(t, nil)
+		root := NewRootCmd(deps)
+		root.SetArgs([]string{flag})
+		require.NoError(rt, root.ExecuteContext(context.Background()))
+		got, err := root.PersistentFlags().GetBool("readonly")
+		require.NoError(rt, err)
+		require.True(rt, got, "flag %q must set readonly=true", flag)
+	})
 }
 
 func TestOutput_NoColorFormat(t *testing.T) {

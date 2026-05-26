@@ -39,6 +39,10 @@ func New() *InMemRepo {
 
 func (r *InMemRepo) Close() error { return nil }
 
+// ReadOnly reports whether this fake repository is read-only.
+// In-memory fakes are always writable.
+func (r *InMemRepo) ReadOnly() bool { return false }
+
 func (r *InMemRepo) SchemaVersion(_ context.Context) (int, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

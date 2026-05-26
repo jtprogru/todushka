@@ -39,6 +39,7 @@ type Model struct {
 	confirm     *confirmState
 	filterQuery string
 	filtering   bool
+	readOnly    bool
 
 	tagNamesByID     map[id.ID]string
 	areaNamesByID    map[id.ID]string
@@ -58,6 +59,10 @@ func NewModel(svc *app.Service, theme Theme, cfg config.AppConfig) Model {
 	ti := textinput.New()
 	ti.Placeholder = "what to do? — tokens: #tag @today @project !YYYY-MM-DD"
 	ti.CharLimit = 256
+	var ro bool
+	if svc != nil {
+		ro = svc.Repo().ReadOnly()
+	}
 	return Model{
 		service:          svc,
 		keys:             DefaultKeyMap(),
@@ -72,10 +77,24 @@ func NewModel(svc *app.Service, theme Theme, cfg config.AppConfig) Model {
 		headingNamesByID: make(map[id.ID]string),
 		config:           cfg,
 		listCounts:       make(map[listKind]int),
+		readOnly:         ro,
 	}
 }
 
 func (m Model) Init() tea.Cmd { return m.loadCurrentList() }
+
+// blockWriteIfReadOnly mutates m to surface the RO status message and
+// returns true when the model is in read-only mode. Callers must use a
+// pointer receiver method or inline the equivalent for value-receiver
+// flows (see dispatch in bulk.go).
+func (m *Model) blockWriteIfReadOnly() bool {
+	if !m.readOnly {
+		return false
+	}
+	m.statusMsg = "read-only mode: writes disabled"
+	m.statusUntil = time.Now().Add(statusFadeDuration)
+	return true
+}
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -250,6 +269,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Enter):
 		return m.openEditor()
 	case key.Matches(msg, m.keys.QuickEntry):
+		if m.blockWriteIfReadOnly() {
+			return m, tea.Tick(statusFadeDuration, func(time.Time) tea.Msg { return clearStatusMsg{} })
+		}
 		m.screen = screenQuickEntry
 		m.quickInput.SetValue("")
 		m.quickInput.Focus()
@@ -331,6 +353,10 @@ func (m Model) handleEditorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) saveEditor() (tea.Model, tea.Cmd) {
+	if m.readOnly {
+		m.editor.err = "read-only mode: writes disabled"
+		return m, nil
+	}
 	svc := m.service
 	ed := m.editor
 	return m, func() tea.Msg {
@@ -350,6 +376,9 @@ func (m Model) handleQuickEntryKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		raw := m.quickInput.Value()
 		m.screen = screenList
+		if m.blockWriteIfReadOnly() {
+			return m, tea.Tick(statusFadeDuration, func(time.Time) tea.Msg { return clearStatusMsg{} })
+		}
 		return m, tea.Batch(
 			func() tea.Msg { return quickEntrySubmittedMsg{raw: raw} },
 			m.loadCurrentList(),

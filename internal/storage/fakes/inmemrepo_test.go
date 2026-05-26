@@ -10,6 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestFakes_ReadOnlyAlwaysFalse(t *testing.T) {
+	r := New()
+	require.False(t, r.ReadOnly())
+}
+
 func TestInMemRepo_TaskRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	r := New()
