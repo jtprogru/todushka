@@ -23,6 +23,7 @@ var (
 	ErrDatabaseLocked = errors.New("storage: database is locked by another todushka process")
 	ErrSchemaTooNew   = errors.New("storage: database schema is newer than this binary supports")
 	ErrInvalidImport  = errors.New("storage: invalid import payload")
+	ErrReadOnly       = errors.New("storage: repository is read-only")
 )
 
 // TaskFilter narrows TaskList results. All fields are optional; zero-values
@@ -90,4 +91,9 @@ type Repository interface {
 	TagList(ctx context.Context) ([]tag.Tag, error)
 	TagRename(ctx context.Context, id id.ID, newName string) error
 	TagDelete(ctx context.Context, id id.ID) error
+
+	// ReadOnly reports whether this repository was opened in read-only mode.
+	// When true, all write methods return ErrReadOnly. Read methods work
+	// regardless.
+	ReadOnly() bool
 }

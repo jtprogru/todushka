@@ -12,6 +12,7 @@ import (
 // When invoked without arguments, it launches the TUI via deps.LaunchTUI.
 func NewRootCmd(deps Deps) *cobra.Command {
 	var configFlag string
+	var readOnlyFlag bool
 	root := &cobra.Command{
 		Use:           "todushka",
 		Short:         "Things 3-style todo TUI for the terminal",
@@ -23,6 +24,7 @@ func NewRootCmd(deps Deps) *cobra.Command {
 				// Path resolution failed (e.g. HOME unset in tests).
 				// Fall back to defaults silently — non-fatal.
 				deps.Config = config.Defaults()
+				deps.ReadOnly = readOnlyFlag
 				return nil
 			}
 			cfg, warns, _ := config.Load(path, deps.Env)
@@ -30,6 +32,7 @@ func NewRootCmd(deps Deps) *cobra.Command {
 				_, _ = fmt.Fprintln(deps.Stderr, "warning:", w)
 			}
 			deps.Config = cfg
+			deps.ReadOnly = readOnlyFlag
 			return nil
 		},
 		RunE: func(_ *cobra.Command, _ []string) error {
@@ -40,6 +43,8 @@ func NewRootCmd(deps Deps) *cobra.Command {
 		},
 	}
 	root.PersistentFlags().StringVar(&configFlag, "config", "", "Path to config file (overrides default)")
+	root.PersistentFlags().BoolVar(&readOnlyFlag, "readonly", false, "Open database in read-only mode")
+	root.PersistentFlags().BoolVar(&readOnlyFlag, "ro", false, "Alias for --readonly")
 	root.SetOut(deps.Stdout)
 	root.SetErr(deps.Stderr)
 	root.SetIn(deps.Stdin)

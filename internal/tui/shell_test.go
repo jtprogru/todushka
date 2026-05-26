@@ -3,14 +3,18 @@ package tui
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/jtprogru/todushka/internal/app"
+	"github.com/jtprogru/todushka/internal/config"
 	"github.com/jtprogru/todushka/internal/domain/id"
 	"github.com/jtprogru/todushka/internal/domain/task"
+	"github.com/jtprogru/todushka/internal/storage/bbolt"
 	"github.com/stretchr/testify/require"
 	"pgregory.net/rapid"
 )
@@ -512,4 +516,131 @@ func TestProp_FullScreenHeightWithSeparators(t *testing.T) {
 		out := m.View()
 		require.Equal(rt, m.height, lipgloss.Height(out))
 	})
+}
+
+// TestTUI_ModelReadOnlyReflectsRepo verifies REQ-6.1: NewModel auto-detects
+// the read-only state of the underlying repository via svc.Repo().ReadOnly().
+func TestTUI_ModelReadOnlyReflectsRepo(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "todushka.db")
+	rw, err := bbolt.Open(path)
+	require.NoError(t, err)
+	require.NoError(t, rw.Close())
+
+	ro, err := bbolt.OpenReadOnly(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ro.Close() })
+	require.True(t, ro.ReadOnly())
+
+	svc := app.New(ro, fixedClock{now: time.Date(2026, 5, 25, 10, 0, 0, 0, time.UTC)})
+	m := NewModel(svc, NewTheme(), config.Defaults())
+	require.True(t, m.readOnly, "Model.readOnly must reflect svc.Repo().ReadOnly()")
+}
+
+// TestTUI_CurrentModeReadOnly verifies REQ-6.2: when readOnly is true and no
+// transient modes are active, currentMode returns modeReadOnly.
+func TestTUI_CurrentModeReadOnly(t *testing.T) {
+	m := newTestModel(t)
+	m.readOnly = true
+	require.Equal(t, modeReadOnly, currentMode(m))
+}
+
+// TestTUI_CurrentModePriorityRespected verifies REQ-6.2: modeReadOnly is
+// overridden by all transient modes (HELP > EDITOR > CONFIRM > FILTER >
+// SELECT > READ-ONLY > NORMAL).
+func TestTUI_CurrentModePriorityRespected(t *testing.T) {
+	m := newTestModel(t)
+	m.readOnly = true
+
+	m.filtering = true
+	require.Equal(t, modeFilter, currentMode(m), "filter overrides RO")
+
+	m.filtering = false
+	m.confirm = &confirmState{}
+	require.Equal(t, modeConfirm, currentMode(m), "confirm overrides RO")
+
+	m.confirm = nil
+	m.screen = screenEditor
+	require.Equal(t, modeEditor, currentMode(m), "editor overrides RO")
+
+	m.screen = screenHelp
+	require.Equal(t, modeHelp, currentMode(m), "help overrides RO")
+
+	m.screen = screenList
+	m.selected[id.New()] = struct{}{}
+	require.Equal(t, modeSelect, currentMode(m), "select overrides RO")
+}
+
+// TestTUI_ModeChipReadOnly verifies REQ-6.3: the footer renders the
+// "-- READ-ONLY --" chip when currentMode == modeReadOnly.
+func TestTUI_ModeChipReadOnly(t *testing.T) {
+	m := newTestModel(t)
+	m.readOnly = true
+	out := m.viewFooter()
+	require.Contains(t, out, "-- READ-ONLY --")
+}
+
+// TestTUI_WriteKeyBlockedInRO_Complete verifies REQ-7.1: pressing 'c'
+// in RO mode sets the status message and does NOT complete the task.
+func TestTUI_WriteKeyBlockedInRO_Complete(t *testing.T) {
+	m, svc, tasks := setupModelWithInboxTasks(t, "x")
+	m.readOnly = true
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	mm := m2.(Model)
+	require.Contains(t, mm.statusMsg, "read-only")
+
+	got, err := svc.Repo().TaskGet(context.Background(), tasks[0].ID)
+	require.NoError(t, err)
+	require.Equal(t, task.StatusOpen, got.Status, "task must remain open in RO")
+}
+
+// TestTUI_EditorOpensInRO verifies REQ-7.2: Enter opens the editor for
+// viewing even in RO mode.
+func TestTUI_EditorOpensInRO(t *testing.T) {
+	m, _, _ := setupModelWithInboxTasks(t, "x")
+	m.readOnly = true
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	require.Equal(t, screenEditor, m2.(Model).screen)
+}
+
+// TestTUI_EditorSaveBlockedInRO verifies REQ-7.3: Ctrl+S in editor
+// surfaces a read-only error on the editor without calling EditTask.
+func TestTUI_EditorSaveBlockedInRO(t *testing.T) {
+	m, _, _ := setupModelWithInboxTasks(t, "x")
+	m.readOnly = true
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm := m2.(Model)
+	require.Equal(t, screenEditor, mm.screen)
+	m3, cmd := mm.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	mm = m3.(Model)
+	require.Contains(t, mm.editor.err, "read-only")
+	require.Equal(t, screenEditor, mm.screen, "editor stays open in RO save")
+	require.Nil(t, cmd, "no save command issued in RO")
+}
+
+// TestTUI_BulkDispatchBlockedInRO verifies REQ-7.5: dispatch with a
+// non-empty selection in RO sets the status message and does NOT open
+// the confirm modal.
+func TestTUI_BulkDispatchBlockedInRO(t *testing.T) {
+	m, _, tasks := setupModelWithInboxTasks(t, "a", "b", "c", "d", "e")
+	for _, tk := range tasks {
+		m.selected[tk.ID] = struct{}{}
+	}
+	m.readOnly = true
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	mm := m2.(Model)
+	require.Contains(t, mm.statusMsg, "read-only")
+	require.Nil(t, mm.confirm, "confirm modal must NOT open in RO")
+}
+
+// TestTUI_QuickEntryBlockedInRO verifies REQ-7.1 for the 'n' key: in RO
+// mode pressing 'n' does NOT open the quick-entry modal and sets the
+// status message instead.
+func TestTUI_QuickEntryBlockedInRO(t *testing.T) {
+	m := newTestModel(t)
+	m.readOnly = true
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	mm := m2.(Model)
+	require.Equal(t, screenList, mm.screen, "quick-entry modal must NOT open in RO")
+	require.Contains(t, mm.statusMsg, "read-only")
 }
