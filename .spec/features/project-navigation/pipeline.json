@@ -1,0 +1,21 @@
+{
+  "feature": "project-navigation",
+  "phase": "done",
+  "created_at": "2026-05-27T16:08:18Z",
+  "current_artifact": null,
+  "history": [
+    {"phase": "explore", "artifact": ".spec/features/project-navigation/explore.md", "approved_at": "2026-05-27T16:13:20Z"},
+    {"phase": "requirements", "artifact": ".spec/features/project-navigation/requirements.md", "approved_at": "2026-05-27T16:15:50Z"},
+    {"phase": "design", "artifact": ".spec/features/project-navigation/design.md", "approved_at": "2026-05-27T16:19:37Z"},
+    {"phase": "task-plan", "artifact": ".spec/features/project-navigation/task-plan.md", "approved_at": "2026-05-27T16:37:04Z"},
+    {"phase": "implementation", "artifact": ".spec/features/project-navigation/implementation.md", "approved_at": "2026-05-27T16:57:27Z"},
+    {"phase": "review", "artifact": ".spec/features/project-navigation/review.md", "approved_at": "2026-05-27T17:03:47Z"}
+  ],
+  "review_base_commit": "6bb43cb09d54c5f3471861f505b33f94154b9b73",
+  "branch": "feature/project-navigation",
+  "worktree": null,
+  "last_completed_task": null,
+  "finish_action": "pr",
+  "finished_at": "2026-05-27T17:04:47Z",
+  "finish_base": null
+}
