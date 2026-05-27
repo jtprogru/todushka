@@ -15,7 +15,7 @@
   "branch": "feature/details-pane-redesign",
   "worktree": null,
   "last_completed_task": null,
-  "finish_action": null,
-  "finished_at": null,
+  "finish_action": "pr",
+  "finished_at": "2026-05-27T15:53:50Z",
   "finish_base": null
 }
