@@ -1,0 +1,21 @@
+{
+  "feature": "list-rendering-polish",
+  "phase": "done",
+  "created_at": "2026-05-27T12:09:21Z",
+  "current_artifact": null,
+  "history": [
+    {"phase": "explore", "artifact": "/Users/jtprogru/Work/github/jtprogru/todushka/.spec/features/list-rendering-polish/explore.md", "approved_at": "2026-05-27T12:12:18Z"},
+    {"phase": "requirements", "artifact": "/Users/jtprogru/Work/github/jtprogru/todushka/.spec/features/list-rendering-polish/requirements.md", "approved_at": "2026-05-27T12:13:09Z"},
+    {"phase": "design", "artifact": "/Users/jtprogru/Work/github/jtprogru/todushka/.spec/features/list-rendering-polish/design.md", "approved_at": "2026-05-27T12:14:58Z"},
+    {"phase": "task-plan", "artifact": "/Users/jtprogru/Work/github/jtprogru/todushka/.spec/features/list-rendering-polish/task-plan.md", "approved_at": "2026-05-27T12:29:06Z"},
+    {"phase": "implementation", "artifact": "/Users/jtprogru/Work/github/jtprogru/todushka/.spec/features/list-rendering-polish/implementation.md", "approved_at": "2026-05-27T12:37:26Z"},
+    {"phase": "review", "artifact": "/Users/jtprogru/Work/github/jtprogru/todushka/.spec/features/list-rendering-polish/review.md", "approved_at": "2026-05-27T13:08:09Z"}
+  ],
+  "review_base_commit": "60c83651635be1eca4006bdd9d757ad29a054b52",
+  "branch": "feature/list-rendering-polish",
+  "worktree": null,
+  "last_completed_task": null,
+  "finish_action": "pr",
+  "finished_at": "2026-05-27T13:15:14Z",
+  "finish_base": null
+}

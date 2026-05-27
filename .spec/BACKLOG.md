@@ -5,7 +5,7 @@
 
 ## UI / Layout
 
-### BL-1 — Убрать поля start/due из списка задач
+### BL-1 — Убрать поля start/due из списка задач ✅ done (list-rendering-polish)
 Сейчас в `viewList` (`internal/tui/app.go`) каждая строка содержит
 `start:YYYY-MM-DD due:YYYY-MM-DD` после заголовка — это перегружает
 список.
@@ -20,12 +20,12 @@
 Сделать `list_pane_share ≥ 0.6` либо инвертировать смысл field. Хочется
 чтобы details ≤ 40%.
 
-### BL-3 — Сделать разделители зон жирнее
+### BL-3 — Сделать разделители зон жирнее ✅ done (list-rendering-polish)
 Текущий `renderSeparator` — одинарная `─` через `theme.Help`. Хочется
 визуально более выраженных границ (двойная линия / контрастный цвет /
 жирный символ).
 
-### BL-4 — Перенос строки внутри колонки заголовка
+### BL-4 — Перенос строки внутри колонки заголовка ✅ done (list-rendering-polish)
 Сейчас длинный title переносится с начала экрана и ломает выравнивание
 icon/short/dates. Перенос должен быть строго в пределах title-колонки,
 индентация второй строки должна совпадать с началом title.
@@ -57,8 +57,8 @@ explore phase прежде чем фиксировать scope.
 
 Можно сгруппировать в 3 будущих feature-pipeline'а:
 
-1. **list-rendering-polish** (BL-1, BL-3, BL-4) — рендеринг списка и
-   разделителей. Один fast-track цикл.
+1. ~~**list-rendering-polish** (BL-1, BL-3, BL-4)~~ ✅ done — рендеринг
+   списка и разделителей. Один fast-track цикл.
 2. **details-pane-redesign** (BL-1.1, BL-2, BL-6) — переработка
    details pane: ширина, контент, стилизация. Один full pipeline
    (затрагивает layout + data fetching).
