@@ -13,4 +13,6 @@ var (
 	ErrEmptyInput          = errors.New("app: empty input")
 	ErrSchemaTooNew        = errors.New("app: import schema is newer than this binary")
 	ErrInvalidImport       = errors.New("app: invalid import payload")
+	ErrProjectNotEmpty     = errors.New("app: project has active tasks; confirm required")
+	ErrProjectNotFound     = errors.New("app: project not found")
 )

@@ -153,6 +153,44 @@ func (s *Service) ListProjects(ctx context.Context, areaID *id.ID) ([]project.Pr
 	return s.repo.ProjectList(ctx, storage.ProjectFilter{AreaID: areaID})
 }
 
+// ListProjectsSorted returns projects filtered by areaID (nil = all areas)
+// sorted by Position ASC, then Name case-fold ASC. When includeAllStatuses
+// is false, only Status==StatusOpen are returned. Soft-deleted projects are
+// always excluded (REQ-7.1/7.2/7.3).
+func (s *Service) ListProjectsSorted(ctx context.Context, areaID *id.ID, includeAllStatuses bool) ([]project.Project, error) {
+	filter := storage.ProjectFilter{AreaID: areaID}
+	if !includeAllStatuses {
+		filter.Statuses = []project.Status{project.StatusOpen}
+	}
+	projects, err := s.repo.ProjectList(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	sort.SliceStable(projects, func(i, j int) bool {
+		if projects[i].Position != projects[j].Position {
+			return projects[i].Position < projects[j].Position
+		}
+		return strings.ToLower(projects[i].Name) < strings.ToLower(projects[j].Name)
+	})
+	return projects, nil
+}
+
+// CountProjectTasks returns the number of open and total non-deleted tasks
+// referencing the given project (REQ-2.1 / display counts).
+func (s *Service) CountProjectTasks(ctx context.Context, pid id.ID) (open, total int, err error) {
+	tasks, err := s.repo.TaskList(ctx, storage.TaskFilter{ProjectID: &pid})
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, t := range tasks {
+		total++
+		if t.Status == task.StatusOpen {
+			open++
+		}
+	}
+	return open, total, nil
+}
+
 func (s *Service) GetProject(ctx context.Context, pid id.ID) (project.Project, error) {
 	return s.repo.ProjectGet(ctx, pid)
 }

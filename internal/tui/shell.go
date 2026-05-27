@@ -28,6 +28,7 @@ const (
 	modeEditor
 	modeHelp
 	modeReadOnly
+	modeProjects
 )
 
 // modeLabel returns the human-readable label used inside the footer chip
@@ -48,6 +49,8 @@ func (m shellMode) modeLabel() string {
 		return "HELP"
 	case modeReadOnly:
 		return "READ-ONLY"
+	case modeProjects:
+		return "PROJECTS"
 	}
 	return "?"
 }
@@ -65,6 +68,8 @@ func currentMode(m Model) shellMode {
 		return modeConfirm
 	case m.filtering:
 		return modeFilter
+	case m.screen == screenProjects || m.screen == screenProjectTasks:
+		return modeProjects
 	case len(m.selected) > 0:
 		return modeSelect
 	case m.readOnly:
@@ -93,6 +98,8 @@ func modeKeyHints(mode shellMode) []string {
 		return []string{"?: close"}
 	case modeReadOnly:
 		return []string{"/: filter", "↵: view", "?: help", "q: quit"}
+	case modeProjects:
+		return []string{"↵: open", "n: new", "e: edit", "d: delete", "/: filter", "a: status", "esc/P: back"}
 	}
 	return nil
 }

@@ -30,6 +30,16 @@ const (
 	screenQuickEntry
 	screenHelp
 	screenEditor
+	screenProjects
+	screenProjectTasks
+)
+
+// projectStatusFilterMode controls which projects are shown in screenProjects.
+type projectStatusFilterMode int
+
+const (
+	psfOpen projectStatusFilterMode = iota
+	psfAll
 )
 
 type editorSavedMsg struct{ updated task.Task }
@@ -95,4 +105,35 @@ type nameCacheLoadedMsg struct {
 // countsLoadedMsg carries per-list task counts after fetchListCounts Cmd.
 type countsLoadedMsg struct {
 	counts map[listKind]int
+}
+
+// projectsLoadedMsg carries the sorted project list and per-project task
+// counts ({open, total}) after fetchProjects Cmd.
+type projectsLoadedMsg struct {
+	projects []project.Project
+	counts   map[id.ID][2]int
+}
+
+// projectTasksLoadedMsg carries the tasks of the active project for the
+// screenProjectTasks zoom-in view.
+type projectTasksLoadedMsg struct {
+	projectID id.ID
+	tasks     []task.Task
+}
+
+// projectSavedMsg signals that ProjectEditorModel.ApplyAndSave succeeded.
+type projectSavedMsg struct {
+	project project.Project
+	created bool
+}
+
+// projectDeletedMsg signals successful DeleteProject for the given ID.
+type projectDeletedMsg struct {
+	projectID id.ID
+}
+
+// projectEditorErrMsg surfaces a validation/save error to the editor modal
+// so it can keep itself open and display the error.
+type projectEditorErrMsg struct {
+	err string
 }

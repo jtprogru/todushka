@@ -50,6 +50,16 @@ type Model struct {
 	height     int
 	config     config.AppConfig
 	listCounts map[listKind]int
+
+	// Projects screen state (BL-5)
+	projects            []project.Project
+	projectCounts       map[id.ID][2]int
+	projectCursor       int
+	activeProjectID     *id.ID
+	projectStatusFilter projectStatusFilterMode
+	projectTasks        []task.Task
+	projectEditor       ProjectEditorModel
+	editingProject      bool
 }
 
 // allLists is the canonical order used by Tab/Shift+Tab cycling and the header.
@@ -79,6 +89,7 @@ func NewModel(svc *app.Service, theme Theme, cfg config.AppConfig) Model {
 		config:           cfg,
 		listCounts:       make(map[listKind]int),
 		readOnly:         ro,
+		projectCounts:    make(map[id.ID][2]int),
 	}
 }
 
@@ -118,6 +129,47 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.listCounts = msg.counts
 		return m, nil
 
+	case projectsLoadedMsg:
+		m.projects = msg.projects
+		m.projectCounts = msg.counts
+		// Refresh area name cache for any new areas referenced by projects.
+		areaIDs := make([]id.ID, 0)
+		for _, p := range msg.projects {
+			if p.AreaID != nil {
+				areaIDs = append(areaIDs, *p.AreaID)
+			}
+		}
+		if m.projectCursor >= len(displayedProjects(m)) {
+			m.projectCursor = max(0, len(displayedProjects(m))-1)
+		}
+		return m, fetchAreaNames(m.service, areaIDs)
+
+	case projectTasksLoadedMsg:
+		if m.activeProjectID == nil || msg.projectID != *m.activeProjectID {
+			return m, nil
+		}
+		m.projectTasks = msg.tasks
+		// Mirror into m.tasks so existing helpers (selectedTask,
+		// completeSelected, displayedTasks, dispatch, etc.) operate on
+		// the zoom view without per-helper screen checks.
+		m.tasks = msg.tasks
+		if m.cursor >= len(msg.tasks) {
+			m.cursor = max(0, len(msg.tasks)-1)
+		}
+		return m, fetchNameCache(m.service, msg.tasks)
+
+	case projectSavedMsg:
+		m.editingProject = false
+		m.projectEditor = ProjectEditorModel{}
+		return m, fetchProjects(m.service, m.projectStatusFilter == psfAll)
+
+	case projectEditorErrMsg:
+		m.projectEditor.err = msg.err
+		return m, nil
+
+	case projectDeletedMsg:
+		return m, fetchProjects(m.service, m.projectStatusFilter == psfAll)
+
 	case nameCacheLoadedMsg:
 		for k, v := range msg.tags {
 			m.tagNamesByID[k] = v
@@ -148,7 +200,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.statusUntil = time.Now().Add(statusFadeDuration)
 		return m, tea.Batch(
-			m.loadCurrentList(),
+			m.reloadDisplayedTasks(),
 			tea.Tick(statusFadeDuration, func(time.Time) tea.Msg { return clearStatusMsg{} }),
 		)
 
@@ -158,7 +210,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusUntil = time.Now().Add(statusFadeDuration)
 			return m, tea.Tick(statusFadeDuration, func(time.Time) tea.Msg { return clearStatusMsg{} })
 		}
-		return m, tea.Batch(m.loadCurrentList(), fetchListCounts(m.service))
+		return m, tea.Batch(m.reloadDisplayedTasks(), fetchListCounts(m.service))
 
 	case errorMsg:
 		m.statusMsg = msg.err.Error()
@@ -185,7 +237,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.loadCurrentList(), fetchListCounts(m.service))
 
 	case editorSavedMsg:
-		m.screen = screenList
+		// Restore origin screen: zoom mode keeps us in screenProjectTasks
+		// so the user does not get bounced back to GTD lists after editing.
+		if m.activeProjectID != nil {
+			m.screen = screenProjectTasks
+		} else {
+			m.screen = screenList
+		}
 		// Inline splice for immediate visual update (REQ-2.1, 2.3, 2.4).
 		for i := range m.tasks {
 			if m.tasks[i].ID == msg.updated.ID {
@@ -195,7 +253,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Async refresh handles sort order, header counts, and name cache.
 		return m, tea.Batch(
-			m.loadCurrentList(),
+			m.reloadDisplayedTasks(),
 			fetchListCounts(m.service),
 		)
 
@@ -217,6 +275,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleQuickEntryKey(msg)
 	case screenEditor:
 		return m.handleEditorKey(msg)
+	case screenProjects:
+		return m.handleProjectsKey(msg)
+	case screenProjectTasks:
+		return m.handleProjectTasksKey(msg)
 	}
 
 	switch {
@@ -236,6 +298,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.filtering = true
 		m.filterQuery = ""
 		return m, nil
+	case key.Matches(msg, m.keys.Projects):
+		m.screen = screenProjects
+		m.projectCursor = 0
+		m.filterQuery = ""
+		m.filtering = false
+		return m, fetchProjects(m.service, m.projectStatusFilter == psfAll)
 	case key.Matches(msg, m.keys.NextView):
 		return m.switchList(nextList(m.activeList, +1))
 	case key.Matches(msg, m.keys.PrevView):
@@ -340,7 +408,11 @@ func (m Model) lookupTagNames(ids []id.ID) ([]string, error) {
 func (m Model) handleEditorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.CloseModal):
-		m.screen = screenList
+		if m.activeProjectID != nil {
+			m.screen = screenProjectTasks
+		} else {
+			m.screen = screenList
+		}
 		return m, nil
 	case key.Matches(msg, m.keys.Save):
 		return m.saveEditor()
@@ -379,6 +451,236 @@ func (m Model) saveEditor() (tea.Model, tea.Cmd) {
 	}
 }
 
+// handleProjectsKey dispatches key events in screenProjects. GTD keys
+// (1..6, Tab/Shift+Tab) and task bulk-actions are intentionally ignored
+// here — they are not part of the projects screen contract (REQ-1.4).
+func (m Model) handleProjectsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.editingProject {
+		return m.handleProjectEditorKey(msg)
+	}
+	if m.confirm != nil {
+		return handleConfirmKey(m, msg)
+	}
+	if m.filtering {
+		nm, cmd := handleFilterKey(m, msg)
+		// Clamp cursor when filter shrinks the visible list.
+		if nm.projectCursor >= len(displayedProjects(nm)) {
+			nm.projectCursor = max(0, len(displayedProjects(nm))-1)
+		}
+		return nm, cmd
+	}
+	switch {
+	case key.Matches(msg, m.keys.CloseModal):
+		m.screen = screenList
+		m.projectCursor = 0
+		m.filterQuery = ""
+		return m, nil
+	case key.Matches(msg, m.keys.Projects):
+		m.screen = screenList
+		m.projectCursor = 0
+		m.filterQuery = ""
+		return m, nil
+	case key.Matches(msg, m.keys.Up):
+		if m.projectCursor > 0 {
+			m.projectCursor--
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Down):
+		if m.projectCursor < len(displayedProjects(m))-1 {
+			m.projectCursor++
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Filter):
+		m.filtering = true
+		m.filterQuery = ""
+		return m, nil
+	case key.Matches(msg, m.keys.ToggleAllStatuses):
+		if m.projectStatusFilter == psfOpen {
+			m.projectStatusFilter = psfAll
+		} else {
+			m.projectStatusFilter = psfOpen
+		}
+		return m, fetchProjects(m.service, m.projectStatusFilter == psfAll)
+	case key.Matches(msg, m.keys.QuickEntry):
+		// 'n' in screenProjects = new project (REQ-3.1).
+		if m.blockWriteIfReadOnly() {
+			return m, tea.Tick(statusFadeDuration, func(time.Time) tea.Msg { return clearStatusMsg{} })
+		}
+		m.projectEditor = newProjectEditor(true, nil, m.service)
+		m.editingProject = true
+		return m, m.projectEditor.focusCurrent()
+	case msg.String() == "e":
+		// REQ-3.2: edit selected project.
+		if m.blockWriteIfReadOnly() {
+			return m, tea.Tick(statusFadeDuration, func(time.Time) tea.Msg { return clearStatusMsg{} })
+		}
+		p := projectAtCursor(m)
+		if p == nil {
+			return m, nil
+		}
+		m.projectEditor = newProjectEditor(false, p, m.service)
+		m.editingProject = true
+		return m, m.projectEditor.focusCurrent()
+	case key.Matches(msg, m.keys.Delete):
+		// REQ-3.8: confirm delete.
+		if m.blockWriteIfReadOnly() {
+			return m, tea.Tick(statusFadeDuration, func(time.Time) tea.Msg { return clearStatusMsg{} })
+		}
+		p := projectAtCursor(m)
+		if p == nil {
+			return m, nil
+		}
+		pid := p.ID
+		m.confirm = &confirmState{projectID: &pid}
+		return m, nil
+	case key.Matches(msg, m.keys.Enter):
+		// REQ-4.1: zoom into project.
+		p := projectAtCursor(m)
+		if p == nil {
+			return m, nil
+		}
+		pid := p.ID
+		m.screen = screenProjectTasks
+		m.activeProjectID = &pid
+		m.cursor = 0
+		m.filterQuery = ""
+		m.filtering = false
+		m.selected = make(map[id.ID]struct{})
+		return m, fetchProjectTasks(m.service, pid)
+	}
+	// All other keys (1..6, Tab, Shift+Tab, c/x/p, etc.) are no-ops in
+	// screenProjects (REQ-1.4).
+	return m, nil
+}
+
+// handleProjectTasksKey processes keys in the project-tasks zoom screen.
+// All GTD-navigation keys (P, Tab, Shift+Tab, 1..6) are blocked. Esc
+// returns to screenProjects. The remaining keys reuse the existing task
+// helpers because m.tasks is mirrored from m.projectTasks while zoomed.
+func (m Model) handleProjectTasksKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.confirm != nil {
+		return handleConfirmKey(m, msg)
+	}
+	if m.filtering {
+		return handleFilterKey(m, msg)
+	}
+	// Blocked keys (REQ-4.6): no-op so user cannot escape into GTD nav.
+	switch {
+	case key.Matches(msg, m.keys.Projects),
+		key.Matches(msg, m.keys.NextView),
+		key.Matches(msg, m.keys.PrevView),
+		key.Matches(msg, m.keys.Inbox),
+		key.Matches(msg, m.keys.Today),
+		key.Matches(msg, m.keys.Upcoming),
+		key.Matches(msg, m.keys.Anytime),
+		key.Matches(msg, m.keys.Someday),
+		key.Matches(msg, m.keys.Logbook):
+		return m, nil
+	}
+	// Esc returns to screenProjects (or clears selection if any).
+	if key.Matches(msg, m.keys.ClearSelection) && len(m.selected) > 0 {
+		m.selected = make(map[id.ID]struct{})
+		return m, nil
+	}
+	if key.Matches(msg, m.keys.CloseModal) {
+		m.screen = screenProjects
+		m.activeProjectID = nil
+		m.projectTasks = nil
+		m.tasks = nil
+		m.cursor = 0
+		m.selected = make(map[id.ID]struct{})
+		return m, fetchProjects(m.service, m.projectStatusFilter == psfAll)
+	}
+	switch {
+	case key.Matches(msg, m.keys.Quit):
+		return m, tea.Quit
+	case key.Matches(msg, m.keys.Help):
+		if m.screen == screenHelp {
+			m.screen = screenProjectTasks
+		} else {
+			m.screen = screenHelp
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Filter):
+		m.filtering = true
+		m.filterQuery = ""
+		return m, nil
+	case key.Matches(msg, m.keys.ToggleSelect):
+		sel := m.selectedTask()
+		if sel != nil {
+			if _, ok := m.selected[sel.ID]; ok {
+				delete(m.selected, sel.ID)
+			} else {
+				m.selected[sel.ID] = struct{}{}
+			}
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.SelectAll):
+		for _, t := range displayedTasks(m) {
+			m.selected[t.ID] = struct{}{}
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Up):
+		if m.cursor > 0 {
+			m.cursor--
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Down):
+		if m.cursor < len(m.tasks)-1 {
+			m.cursor++
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Enter):
+		return m.openEditor()
+	case key.Matches(msg, m.keys.Complete):
+		return dispatch(m, bulkActionComplete)
+	case key.Matches(msg, m.keys.Cancel):
+		return dispatch(m, bulkActionCancel)
+	case key.Matches(msg, m.keys.Delete):
+		return dispatch(m, bulkActionDelete)
+	case key.Matches(msg, m.keys.PinToday):
+		return dispatch(m, bulkActionPin)
+	case key.Matches(msg, m.keys.Refresh):
+		return m, m.reloadDisplayedTasks()
+	}
+	return m, nil
+}
+
+// handleProjectEditorKey processes key events while the ProjectEditorModel
+// modal is active in screenProjects. Esc cancels, Ctrl+S validates and
+// saves, Tab/Shift+Tab cycle fields, Space on AutoClose toggles bool,
+// everything else dispatches into the focused sub-widget.
+func (m Model) handleProjectEditorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.keys.CloseModal):
+		m.editingProject = false
+		m.projectEditor = ProjectEditorModel{}
+		return m, nil
+	case key.Matches(msg, m.keys.Save):
+		svc := m.service
+		editor := m.projectEditor
+		return m, func() tea.Msg {
+			p, created, err := editor.ApplyAndSave(context.Background(), svc)
+			if err != nil {
+				return projectEditorErrMsg{err: err.Error()}
+			}
+			return projectSavedMsg{project: p, created: created}
+		}
+	case key.Matches(msg, m.keys.NextField):
+		m.projectEditor = m.projectEditor.nextField()
+		return m, m.projectEditor.focusCurrent()
+	case key.Matches(msg, m.keys.PrevField):
+		m.projectEditor = m.projectEditor.prevField()
+		return m, m.projectEditor.focusCurrent()
+	case m.projectEditor.focus == pefAutoClose && msg.Type == tea.KeySpace:
+		m.projectEditor.autoClose = !m.projectEditor.autoClose
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.projectEditor, cmd = m.projectEditor.UpdateForm(msg)
+	return m, cmd
+}
+
 func (m Model) handleQuickEntryKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
@@ -405,6 +707,16 @@ func (m Model) switchList(l listKind) (tea.Model, tea.Cmd) {
 	m.activeList = l
 	m.cursor = 0
 	return m, m.loadCurrentList()
+}
+
+// reloadDisplayedTasks returns the right Cmd to refresh the currently
+// visible task list: tasks-of-active-project in screenProjectTasks zoom
+// mode, otherwise the GTD list selected by m.activeList.
+func (m Model) reloadDisplayedTasks() tea.Cmd {
+	if m.screen == screenProjectTasks && m.activeProjectID != nil {
+		return fetchProjectTasks(m.service, *m.activeProjectID)
+	}
+	return m.loadCurrentList()
 }
 
 func (m Model) loadCurrentList() tea.Cmd {
@@ -546,6 +858,17 @@ func (m Model) pinSelected() (Model, tea.Cmd) {
 // Returns the body content (header and footer are wrapped separately by View).
 // When single-pane, viewBody equals viewList — preserves the legacy layout.
 func (m Model) viewBody() string {
+	if m.screen == screenProjects {
+		body := viewProjectList(m, m.width)
+		if m.editingProject {
+			editor := m.projectEditor.View(m.theme, m.editorWidth())
+			body = lipgloss.JoinVertical(lipgloss.Left, body, editor)
+		}
+		return body
+	}
+	if m.screen == screenProjectTasks {
+		return viewProjectTasks(m, m.width)
+	}
 	if !isDualPane(m) {
 		return m.viewList()
 	}
@@ -577,7 +900,19 @@ func (m Model) View() string {
 	}
 	var body string
 	if m.confirm != nil {
-		modal := m.theme.Modal.Render(fmt.Sprintf("%s %d tasks? (y/n)", m.confirm.action.label(), len(m.confirm.ids)))
+		var modal string
+		if m.confirm.projectID != nil {
+			name := id.Short(*m.confirm.projectID)
+			for _, p := range m.projects {
+				if p.ID == *m.confirm.projectID {
+					name = p.Name
+					break
+				}
+			}
+			modal = m.theme.Modal.Render(fmt.Sprintf("Delete project %q? Tasks will move to Inbox. (y/n)", name))
+		} else {
+			modal = m.theme.Modal.Render(fmt.Sprintf("%s %d tasks? (y/n)", m.confirm.action.label(), len(m.confirm.ids)))
+		}
 		body = lipgloss.JoinVertical(lipgloss.Left, m.viewBody(), modal)
 	} else {
 		switch m.screen {

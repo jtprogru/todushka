@@ -328,6 +328,37 @@ func (s *Service) DeleteArea(ctx context.Context, aid id.ID, confirm bool) error
 	return s.repo.AreaDelete(ctx, aid, false)
 }
 
+// DeleteProject soft-deletes a project. If confirm=false and the project
+// has active (non-soft-deleted) tasks, returns ErrProjectNotEmpty without
+// mutation (REQ-6.1). If confirm=true, reassigns each task's ProjectID
+// and HeadingID to nil and soft-deletes the project (REQ-6.2/6.3). On
+// repo read-only, the first write fails fast (REQ-6.5).
+func (s *Service) DeleteProject(ctx context.Context, pid id.ID, confirm bool) error {
+	if _, err := s.repo.ProjectGet(ctx, pid); err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			return ErrProjectNotFound
+		}
+		return err
+	}
+	tasks, err := s.repo.TaskList(ctx, storage.TaskFilter{ProjectID: &pid})
+	if err != nil {
+		return err
+	}
+	if !confirm && len(tasks) > 0 {
+		return ErrProjectNotEmpty
+	}
+	now := s.clock.Now()
+	for _, t := range tasks {
+		t.ProjectID = nil
+		t.HeadingID = nil
+		t.UpdatedAt = now
+		if err := s.repo.TaskUpdate(ctx, t); err != nil {
+			return err
+		}
+	}
+	return s.repo.ProjectDelete(ctx, pid, true)
+}
+
 func (s *Service) AddHeading(ctx context.Context, projectID id.ID, name string) (project.Heading, error) {
 	now := s.clock.Now()
 	h := project.Heading{

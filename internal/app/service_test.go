@@ -7,9 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jtprogru/todushka/internal/domain/area"
 	"github.com/jtprogru/todushka/internal/domain/id"
 	"github.com/jtprogru/todushka/internal/domain/project"
 	"github.com/jtprogru/todushka/internal/domain/repeat"
+	"github.com/jtprogru/todushka/internal/domain/tag"
 	"github.com/jtprogru/todushka/internal/domain/task"
 	"github.com/jtprogru/todushka/internal/storage"
 	"github.com/jtprogru/todushka/internal/storage/fakes"
@@ -309,4 +311,315 @@ func TestService_TagRenameCollision(t *testing.T) {
 	_, _ = s.UpsertTag(ctx, "home")
 	err := s.RenameTag(ctx, a.ID, "Home")
 	require.ErrorIs(t, err, ErrTagAlreadyExists)
+}
+
+// readOnlyRepo wraps an InMemRepo and returns storage.ErrReadOnly on every
+// write method. Used to verify service-layer fail-fast behavior under a
+// read-only repository (REQ-6.5).
+type readOnlyRepo struct{ inner storage.Repository }
+
+func (r *readOnlyRepo) Close() error                                 { return r.inner.Close() }
+func (r *readOnlyRepo) ReadOnly() bool                               { return true }
+func (r *readOnlyRepo) SchemaVersion(c context.Context) (int, error) { return r.inner.SchemaVersion(c) }
+func (r *readOnlyRepo) Migrate(c context.Context, t int) error       { return storage.ErrReadOnly }
+
+func (r *readOnlyRepo) TaskCreate(c context.Context, t task.Task) error { return storage.ErrReadOnly }
+func (r *readOnlyRepo) TaskGet(c context.Context, i id.ID) (task.Task, error) {
+	return r.inner.TaskGet(c, i)
+}
+func (r *readOnlyRepo) TaskList(c context.Context, f storage.TaskFilter) ([]task.Task, error) {
+	return r.inner.TaskList(c, f)
+}
+func (r *readOnlyRepo) TaskUpdate(c context.Context, t task.Task) error { return storage.ErrReadOnly }
+func (r *readOnlyRepo) TaskDelete(c context.Context, i id.ID, soft bool) error {
+	return storage.ErrReadOnly
+}
+func (r *readOnlyRepo) TaskMatchShort(c context.Context, p string) ([]task.Task, error) {
+	return r.inner.TaskMatchShort(c, p)
+}
+
+func (r *readOnlyRepo) ProjectCreate(c context.Context, p project.Project) error {
+	return storage.ErrReadOnly
+}
+func (r *readOnlyRepo) ProjectGet(c context.Context, i id.ID) (project.Project, error) {
+	return r.inner.ProjectGet(c, i)
+}
+func (r *readOnlyRepo) ProjectList(c context.Context, f storage.ProjectFilter) ([]project.Project, error) {
+	return r.inner.ProjectList(c, f)
+}
+func (r *readOnlyRepo) ProjectUpdate(c context.Context, p project.Project) error {
+	return storage.ErrReadOnly
+}
+func (r *readOnlyRepo) ProjectDelete(c context.Context, i id.ID, soft bool) error {
+	return storage.ErrReadOnly
+}
+func (r *readOnlyRepo) ProjectFindByName(c context.Context, n string) ([]project.Project, error) {
+	return r.inner.ProjectFindByName(c, n)
+}
+func (r *readOnlyRepo) HeadingCreate(c context.Context, h project.Heading) error {
+	return storage.ErrReadOnly
+}
+func (r *readOnlyRepo) HeadingUpdate(c context.Context, h project.Heading) error {
+	return storage.ErrReadOnly
+}
+func (r *readOnlyRepo) HeadingDelete(c context.Context, i id.ID) error { return storage.ErrReadOnly }
+func (r *readOnlyRepo) HeadingList(c context.Context, pid id.ID) ([]project.Heading, error) {
+	return r.inner.HeadingList(c, pid)
+}
+
+func (r *readOnlyRepo) AreaCreate(c context.Context, a area.Area) error { return storage.ErrReadOnly }
+func (r *readOnlyRepo) AreaGet(c context.Context, i id.ID) (area.Area, error) {
+	return r.inner.AreaGet(c, i)
+}
+func (r *readOnlyRepo) AreaList(c context.Context) ([]area.Area, error) { return r.inner.AreaList(c) }
+func (r *readOnlyRepo) AreaUpdate(c context.Context, a area.Area) error { return storage.ErrReadOnly }
+func (r *readOnlyRepo) AreaDelete(c context.Context, i id.ID, soft bool) error {
+	return storage.ErrReadOnly
+}
+func (r *readOnlyRepo) AreaFindByNormalized(c context.Context, n string) (area.Area, error) {
+	return r.inner.AreaFindByNormalized(c, n)
+}
+
+func (r *readOnlyRepo) TagCreate(c context.Context, t tag.Tag) error { return storage.ErrReadOnly }
+func (r *readOnlyRepo) TagUpsert(c context.Context, n string) (tag.Tag, error) {
+	return tag.Tag{}, storage.ErrReadOnly
+}
+func (r *readOnlyRepo) TagGet(c context.Context, i id.ID) (tag.Tag, error) {
+	return r.inner.TagGet(c, i)
+}
+func (r *readOnlyRepo) TagList(c context.Context) ([]tag.Tag, error) { return r.inner.TagList(c) }
+func (r *readOnlyRepo) TagRename(c context.Context, i id.ID, n string) error {
+	return storage.ErrReadOnly
+}
+func (r *readOnlyRepo) TagDelete(c context.Context, i id.ID) error { return storage.ErrReadOnly }
+
+// ─── BL-5: DeleteProject ─────────────────────────────────────────────────
+
+func TestService_DeleteProject_NotFound(t *testing.T) {
+	ctx := context.Background()
+	s := newService(t, time.Now())
+	err := s.DeleteProject(ctx, id.New(), true)
+	require.ErrorIs(t, err, ErrProjectNotFound)
+}
+
+func TestService_DeleteProject_NonEmpty_NoConfirm(t *testing.T) {
+	ctx := context.Background()
+	s := newService(t, time.Date(2026, 5, 25, 10, 0, 0, 0, time.UTC))
+	p, err := s.AddProject(ctx, AddProjectInput{Name: "PRs"})
+	require.NoError(t, err)
+	pid := p.ID
+	tk, err := s.AddTask(ctx, AddTaskInput{Title: "review", ProjectID: &pid})
+	require.NoError(t, err)
+
+	err = s.DeleteProject(ctx, pid, false)
+	require.ErrorIs(t, err, ErrProjectNotEmpty)
+
+	// Project unchanged.
+	got, err := s.repo.ProjectGet(ctx, pid)
+	require.NoError(t, err)
+	require.Nil(t, got.DeletedAt)
+	// Task unchanged.
+	gotTask, err := s.repo.TaskGet(ctx, tk.ID)
+	require.NoError(t, err)
+	require.NotNil(t, gotTask.ProjectID)
+	require.Equal(t, pid, *gotTask.ProjectID)
+}
+
+func TestService_DeleteProject_NonEmpty_Confirm(t *testing.T) {
+	ctx := context.Background()
+	s := newService(t, time.Date(2026, 5, 25, 10, 0, 0, 0, time.UTC))
+	p, err := s.AddProject(ctx, AddProjectInput{Name: "PRs"})
+	require.NoError(t, err)
+	pid := p.ID
+	h, err := s.AddHeading(ctx, pid, "Section A")
+	require.NoError(t, err)
+	hid := h.ID
+	tk1, err := s.AddTask(ctx, AddTaskInput{Title: "t1", ProjectID: &pid})
+	require.NoError(t, err)
+	tk2, err := s.AddTask(ctx, AddTaskInput{Title: "t2", ProjectID: &pid, HeadingID: &hid})
+	require.NoError(t, err)
+
+	require.NoError(t, s.DeleteProject(ctx, pid, true))
+
+	// Tasks: ProjectID=nil, HeadingID=nil.
+	g1, _ := s.repo.TaskGet(ctx, tk1.ID)
+	require.Nil(t, g1.ProjectID)
+	require.Nil(t, g1.HeadingID)
+	g2, _ := s.repo.TaskGet(ctx, tk2.ID)
+	require.Nil(t, g2.ProjectID)
+	require.Nil(t, g2.HeadingID)
+
+	// Project soft-deleted.
+	gp, err := s.repo.ProjectGet(ctx, pid)
+	require.NoError(t, err)
+	require.NotNil(t, gp.DeletedAt)
+}
+
+func TestService_DeleteProject_Empty_Confirm(t *testing.T) {
+	ctx := context.Background()
+	s := newService(t, time.Date(2026, 5, 25, 10, 0, 0, 0, time.UTC))
+	p, _ := s.AddProject(ctx, AddProjectInput{Name: "PRs"})
+
+	require.NoError(t, s.DeleteProject(ctx, p.ID, true))
+
+	// Excluded from default ProjectList.
+	list, err := s.repo.ProjectList(ctx, storage.ProjectFilter{})
+	require.NoError(t, err)
+	for _, x := range list {
+		require.NotEqual(t, p.ID, x.ID)
+	}
+	// But visible with IncludeDeleted.
+	allList, _ := s.repo.ProjectList(ctx, storage.ProjectFilter{IncludeDeleted: true})
+	found := false
+	for _, x := range allList {
+		if x.ID == p.ID {
+			found = true
+			require.NotNil(t, x.DeletedAt)
+			break
+		}
+	}
+	require.True(t, found, "soft-deleted project must be retrievable via IncludeDeleted filter")
+}
+
+func TestService_DeleteProject_Empty_NoConfirm(t *testing.T) {
+	ctx := context.Background()
+	s := newService(t, time.Now())
+	p, _ := s.AddProject(ctx, AddProjectInput{Name: "x"})
+
+	// No tasks → confirm=false should succeed (empty-guard does not trigger).
+	require.NoError(t, s.DeleteProject(ctx, p.ID, false))
+}
+
+func TestService_DeleteProject_ReadOnly(t *testing.T) {
+	ctx := context.Background()
+	inner := fakes.New()
+	now := time.Date(2026, 5, 25, 10, 0, 0, 0, time.UTC)
+	// Seed an empty project so ProjectGet succeeds.
+	pid := id.New()
+	require.NoError(t, inner.ProjectCreate(ctx, project.Project{
+		ID: pid, Name: "x", Status: project.StatusOpen,
+		CreatedAt: now, UpdatedAt: now,
+	}))
+	ro := &readOnlyRepo{inner: inner}
+	s := New(ro, fixedClock{now: now})
+	err := s.DeleteProject(ctx, pid, true)
+	require.ErrorIs(t, err, storage.ErrReadOnly)
+}
+
+// ─── BL-5: ListProjectsSorted + CountProjectTasks ───────────────────────
+
+func TestService_ListProjectsSorted_Basic(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 25, 10, 0, 0, 0, time.UTC)
+	s := newService(t, now)
+	mk := func(name string, pos int64) id.ID {
+		pid := id.New()
+		require.NoError(t, s.repo.ProjectCreate(ctx, project.Project{
+			ID: pid, Name: name, Status: project.StatusOpen, Position: pos,
+			CreatedAt: now, UpdatedAt: now,
+		}))
+		return pid
+	}
+	mk("b", 10)
+	mk("A", 5)
+	mk("c", 5)
+
+	got, err := s.ListProjectsSorted(ctx, nil, true)
+	require.NoError(t, err)
+	require.Len(t, got, 3)
+	// Expected order: Position=5 first ("A", "c" by case-fold), then Position=10 ("b").
+	require.Equal(t, "A", got[0].Name)
+	require.Equal(t, "c", got[1].Name)
+	require.Equal(t, "b", got[2].Name)
+}
+
+func TestService_ListProjectsSorted_OnlyOpen(t *testing.T) {
+	ctx := context.Background()
+	now := time.Now()
+	s := newService(t, now)
+	mk := func(name string, st project.Status) {
+		require.NoError(t, s.repo.ProjectCreate(ctx, project.Project{
+			ID: id.New(), Name: name, Status: st, CreatedAt: now, UpdatedAt: now,
+		}))
+	}
+	mk("open1", project.StatusOpen)
+	mk("done", project.StatusCompleted)
+	mk("cancel", project.StatusCancelled)
+
+	got, err := s.ListProjectsSorted(ctx, nil, false)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, "open1", got[0].Name)
+}
+
+func TestService_ListProjectsSorted_All(t *testing.T) {
+	ctx := context.Background()
+	now := time.Now()
+	s := newService(t, now)
+	mk := func(name string, st project.Status) {
+		require.NoError(t, s.repo.ProjectCreate(ctx, project.Project{
+			ID: id.New(), Name: name, Status: st, CreatedAt: now, UpdatedAt: now,
+		}))
+	}
+	mk("open1", project.StatusOpen)
+	mk("done", project.StatusCompleted)
+	mk("cancel", project.StatusCancelled)
+
+	got, err := s.ListProjectsSorted(ctx, nil, true)
+	require.NoError(t, err)
+	require.Len(t, got, 3)
+}
+
+func TestService_ListProjectsSorted_AreaFilter(t *testing.T) {
+	ctx := context.Background()
+	now := time.Now()
+	s := newService(t, now)
+	a, _ := s.AddArea(ctx, "Work")
+	aid := a.ID
+	require.NoError(t, s.repo.ProjectCreate(ctx, project.Project{
+		ID: id.New(), Name: "work-proj", Status: project.StatusOpen, AreaID: &aid,
+		CreatedAt: now, UpdatedAt: now,
+	}))
+	require.NoError(t, s.repo.ProjectCreate(ctx, project.Project{
+		ID: id.New(), Name: "no-area", Status: project.StatusOpen,
+		CreatedAt: now, UpdatedAt: now,
+	}))
+
+	got, err := s.ListProjectsSorted(ctx, &aid, true)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, "work-proj", got[0].Name)
+}
+
+func TestService_ListProjectsSorted_ExcludesSoftDeleted(t *testing.T) {
+	ctx := context.Background()
+	now := time.Now()
+	s := newService(t, now)
+	p, _ := s.AddProject(ctx, AddProjectInput{Name: "x"})
+	require.NoError(t, s.DeleteProject(ctx, p.ID, true))
+
+	got, err := s.ListProjectsSorted(ctx, nil, true)
+	require.NoError(t, err)
+	require.Empty(t, got)
+}
+
+func TestService_CountProjectTasks(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 25, 10, 0, 0, 0, time.UTC)
+	s := newService(t, now)
+	p, _ := s.AddProject(ctx, AddProjectInput{Name: "PRs"})
+	pid := p.ID
+	t1, _ := s.AddTask(ctx, AddTaskInput{Title: "t1", ProjectID: &pid})
+	_, _ = s.AddTask(ctx, AddTaskInput{Title: "t2", ProjectID: &pid})
+	t3, _ := s.AddTask(ctx, AddTaskInput{Title: "t3", ProjectID: &pid})
+	// Complete one
+	_, err := s.CompleteTask(ctx, t1.ID)
+	require.NoError(t, err)
+	// Cancel one
+	require.NoError(t, s.CancelTask(ctx, t3.ID))
+
+	open, total, err := s.CountProjectTasks(ctx, pid)
+	require.NoError(t, err)
+	require.Equal(t, 1, open)
+	require.Equal(t, 3, total)
 }

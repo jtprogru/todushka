@@ -39,19 +39,11 @@ explore phase прежде чем фиксировать scope.
 
 ## Features
 
-### BL-5 — Навигация по проектам (отдельный view)
-Сейчас проекты доступны только через editor (как поле задачи). Нужен
-отдельный layer/view/screen для просмотра/выбора/создания/редактирования
-проектов. Похоже на Things 3 "Areas & Projects" sidebar.
-
-Скорее всего потребует:
-- новый `screenKind` (`screenProjects` или similar)
-- key binding для входа/выхода
-- список проектов (фильтрация по area, поиск)
-- интеграция с editor (выбрать project оттуда же)
-- bulk-операции? (тащить задачи между проектами)
-
-Это самый большой пункт из бэклога — отдельный полноценный pipeline.
+### BL-5 — Навигация по проектам (отдельный view) ✅ done (project-navigation)
+Реализовано в v0.9.0: новый `screenProjects` + `screenProjectTasks`,
+CRUD через `ProjectEditorModel`, service `DeleteProject` с reassign
+задач в Inbox. Headings management / bulk-move задач между проектами /
+area picker — deferred v2 (если понадобятся, отдельный pipeline).
 
 ## Группировка для планирования (предложение)
 
@@ -62,8 +54,8 @@ explore phase прежде чем фиксировать scope.
 2. ~~**details-pane-redesign** (BL-1.1, BL-2, BL-6)~~ ✅ done —
    переработка details pane: ширина, контент, стилизация. Один full
    pipeline (затрагивает layout + data fetching).
-3. **project-navigation** (BL-5) — отдельный full pipeline, самый
-   большой scope.
+3. ~~**project-navigation** (BL-5)~~ ✅ done — отдельный полноценный
+   pipeline. Все 6 пунктов бэклога закрыты.
 
 Решение по группировке остаётся за пользователем; список выше —
 рекомендация для удобства.
