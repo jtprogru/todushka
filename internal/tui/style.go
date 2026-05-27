@@ -37,6 +37,7 @@ type Theme struct {
 	Field       lipgloss.Style
 	FieldFocus  lipgloss.Style
 	Label       lipgloss.Style
+	DetailLabel lipgloss.Style
 }
 
 type palette struct {
@@ -141,6 +142,7 @@ func newColorTheme(p palette) Theme {
 		Foreground(t.Text).
 		Padding(0, 1)
 	t.Label = lipgloss.NewStyle().Bold(true).Foreground(t.Subtext)
+	t.DetailLabel = lipgloss.NewStyle().Bold(true).Foreground(t.Accent)
 	return t
 }
 
@@ -168,5 +170,6 @@ func NewMonochromeTheme() Theme {
 		Field:       lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1),
 		FieldFocus:  lipgloss.NewStyle().Border(lipgloss.ThickBorder()).Padding(0, 1),
 		Label:       bold,
+		DetailLabel: bold,
 	}
 }

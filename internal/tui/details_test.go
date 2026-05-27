@@ -11,6 +11,7 @@ import (
 	"github.com/jtprogru/todushka/internal/app"
 	"github.com/jtprogru/todushka/internal/config"
 	"github.com/jtprogru/todushka/internal/domain/id"
+	"github.com/jtprogru/todushka/internal/domain/project"
 	"github.com/jtprogru/todushka/internal/domain/task"
 	"github.com/stretchr/testify/require"
 	"pgregory.net/rapid"
@@ -571,7 +572,7 @@ func TestProp_NoRepoAccessInView(t *testing.T) {
 			selected:         make(map[id.ID]struct{}),
 			tagNamesByID:     make(map[id.ID]string),
 			areaNamesByID:    make(map[id.ID]string),
-			projectNamesByID: make(map[id.ID]string),
+			projectsByID:     make(map[id.ID]project.Project),
 			headingNamesByID: make(map[id.ID]string),
 		}
 		tk := task.Task{ID: id.New(), Title: "x", Status: task.StatusOpen}
@@ -593,7 +594,7 @@ func TestProp_NoRepoAccessInView(t *testing.T) {
 			pid := id.New()
 			tk.ProjectID = &pid
 			if cacheHasProject {
-				m.projectNamesByID[pid] = "todushka"
+				m.projectsByID[pid] = project.Project{Name: "todushka"}
 			}
 		}
 		m.tasks = []task.Task{tk}

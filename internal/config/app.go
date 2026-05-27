@@ -15,7 +15,7 @@ func Defaults() AppConfig {
 	return AppConfig{
 		Theme:                "macchiato",
 		DualPaneMinWidth:     100,
-		ListPaneShare:        0.45,
+		ListPaneShare:        0.60,
 		BulkConfirmThreshold: 5,
 		NotesMaxLines:        8,
 		ConfirmDelete:        true,

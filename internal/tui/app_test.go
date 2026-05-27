@@ -13,6 +13,7 @@ import (
 	"github.com/jtprogru/todushka/internal/app"
 	"github.com/jtprogru/todushka/internal/config"
 	"github.com/jtprogru/todushka/internal/domain/id"
+	"github.com/jtprogru/todushka/internal/domain/project"
 	"github.com/jtprogru/todushka/internal/domain/task"
 	"github.com/jtprogru/todushka/internal/storage/fakes"
 	"github.com/muesli/termenv"
@@ -852,14 +853,14 @@ func TestNameCache_LoadedMsgPopulatesModel(t *testing.T) {
 	msg := nameCacheLoadedMsg{
 		tags:     map[id.ID]string{tid: "work"},
 		areas:    map[id.ID]string{aid: "home"},
-		projects: map[id.ID]string{pid: "todushka"},
+		projects: map[id.ID]project.Project{pid: {Name: "todushka"}},
 		headings: map[id.ID]string{},
 	}
 	m2, _ := m.Update(msg)
 	mm := m2.(Model)
 	require.Equal(t, "work", mm.tagNamesByID[tid])
 	require.Equal(t, "home", mm.areaNamesByID[aid])
-	require.Equal(t, "todushka", mm.projectNamesByID[pid])
+	require.Equal(t, "todushka", mm.projectsByID[pid].Name)
 }
 
 func TestNameCache_FetchCmdEmitsMsg(t *testing.T) {

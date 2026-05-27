@@ -11,7 +11,7 @@ func TestDefaults_AreValid(t *testing.T) {
 	require.Empty(t, warns)
 	require.Equal(t, "macchiato", c.Theme)
 	require.Equal(t, 100, c.DualPaneMinWidth)
-	require.InDelta(t, 0.45, c.ListPaneShare, 1e-9)
+	require.InDelta(t, 0.60, c.ListPaneShare, 1e-9)
 	require.Equal(t, 5, c.BulkConfirmThreshold)
 	require.Equal(t, 8, c.NotesMaxLines)
 	require.True(t, c.ConfirmDelete)
@@ -37,7 +37,7 @@ func TestValidate_NumericRanges(t *testing.T) {
 	}.Validate()
 	require.Len(t, warns, 4)
 	require.Equal(t, 100, c.DualPaneMinWidth)
-	require.InDelta(t, 0.45, c.ListPaneShare, 1e-9)
+	require.InDelta(t, 0.60, c.ListPaneShare, 1e-9)
 	require.Equal(t, 5, c.BulkConfirmThreshold)
 	require.Equal(t, 8, c.NotesMaxLines)
 }

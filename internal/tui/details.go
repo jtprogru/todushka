@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/jtprogru/todushka/internal/app"
 	"github.com/jtprogru/todushka/internal/domain/id"
+	"github.com/jtprogru/todushka/internal/domain/project"
 	"github.com/jtprogru/todushka/internal/domain/task"
 )
 
@@ -50,7 +51,7 @@ func fetchNameCache(svc *app.Service, tasks []task.Task) tea.Cmd {
 		ctx := context.Background()
 		tags := make(map[id.ID]string)
 		areas := make(map[id.ID]string)
-		projects := make(map[id.ID]string)
+		projects := make(map[id.ID]project.Project)
 		headings := make(map[id.ID]string)
 
 		tagSet := make(map[id.ID]struct{})
@@ -81,7 +82,7 @@ func fetchNameCache(svc *app.Service, tasks []task.Task) tea.Cmd {
 		}
 		for pid := range projectSet {
 			if p, err := repo.ProjectGet(ctx, pid); err == nil {
-				projects[pid] = p.Name
+				projects[pid] = p
 			}
 		}
 		return nameCacheLoadedMsg{tags: tags, areas: areas, projects: projects, headings: headings}
@@ -121,6 +122,15 @@ func resolveName(cache map[id.ID]string, tid id.ID) string {
 	return id.Short(tid)
 }
 
+// resolveProjectName looks up a Project by ID and returns its Name, falling
+// back to id.Short(pid) when the cache has no entry or an empty Name.
+func resolveProjectName(cache map[id.ID]project.Project, pid id.ID) string {
+	if p, ok := cache[pid]; ok && p.Name != "" {
+		return p.Name
+	}
+	return id.Short(pid)
+}
+
 // statusLabel maps task.Status to a user-facing label.
 func statusLabel(s task.Status) string {
 	switch s {
@@ -137,45 +147,95 @@ func statusLabel(s task.Status) string {
 // viewDetails renders the right pane content for dual-pane mode. Pure
 // function — reads only m and width. Returns "(no task selected)" when
 // cursorTask(m) is nil.
+//
+// Output is a sequence of logical groups (Title, Status, Notes, Dates,
+// Relations, Tags, Someday). Groups are separated by exactly one blank
+// line; absent groups produce no orphan blank lines (REQ-1.3, REQ-1.4).
+// Labels are styled via theme.DetailLabel (Bold + Accent in color
+// themes); Project/Heading appear on separate lines with project
+// sub-fields nested between them.
 func viewDetails(m Model, width int) string {
 	t := cursorTask(m)
 	if t == nil {
 		return m.theme.Dim.Render("(no task selected)")
 	}
-	var lines []string
-	lines = append(lines, m.theme.Title.Render(wrapAndTruncate(t.Title, width, 4)))
-	lines = append(lines, "Status: "+statusLabel(t.Status))
+	label := func(s string) string { return m.theme.DetailLabel.Render(s) }
+
+	var groups [][]string
+
+	// Group: Title
+	groups = append(groups, []string{m.theme.Title.Render(wrapAndTruncate(t.Title, width, 4))})
+
+	// Group: Status
+	groups = append(groups, []string{label("Status:") + " " + statusLabel(t.Status)})
+
+	// Group: Notes
 	if t.Notes != "" {
-		lines = append(lines, "")
-		lines = append(lines, wrapAndTruncate(t.Notes, width, m.config.NotesMaxLines))
+		groups = append(groups, []string{wrapAndTruncate(t.Notes, width, m.config.NotesMaxLines)})
 	}
+
+	// Group: Dates
+	var dates []string
 	if t.StartDate != nil {
-		lines = append(lines, "Start:  "+t.StartDate.Format("2006-01-02"))
+		dates = append(dates, label("Start:")+"  "+t.StartDate.Format("2006-01-02"))
 	}
 	if t.Deadline != nil {
-		lines = append(lines, "Due:    "+t.Deadline.Format("2006-01-02"))
+		dates = append(dates, label("Due:")+"    "+t.Deadline.Format("2006-01-02"))
 	}
 	if t.PinnedToday != nil {
-		lines = append(lines, "Pinned: "+t.PinnedToday.Format("2006-01-02"))
+		dates = append(dates, label("Pinned:")+" "+t.PinnedToday.Format("2006-01-02"))
 	}
+	if len(dates) > 0 {
+		groups = append(groups, dates)
+	}
+
+	// Group: Relations (Area / Project + sub-fields / Heading on separate lines)
+	var relations []string
 	if t.AreaID != nil {
-		lines = append(lines, "Area:    "+resolveName(m.areaNamesByID, *t.AreaID))
+		relations = append(relations, label("Area:")+"    "+resolveName(m.areaNamesByID, *t.AreaID))
 	}
 	if t.ProjectID != nil {
-		lines = append(lines, "Project: "+resolveName(m.projectNamesByID, *t.ProjectID))
+		relations = append(relations, label("Project:")+" "+resolveProjectName(m.projectsByID, *t.ProjectID))
+		if p, ok := m.projectsByID[*t.ProjectID]; ok && p.Name != "" {
+			if p.Status != project.StatusOpen && p.Status != "" {
+				relations = append(relations, "  "+label("Project status:")+" "+string(p.Status))
+			}
+			if p.Deadline != nil {
+				relations = append(relations, "  "+label("Project due:")+" "+p.Deadline.Format("2006-01-02"))
+			}
+			if p.Notes != "" {
+				relations = append(relations, "  "+label("Project notes:")+" "+wrapAndTruncate(p.Notes, width-2, 3))
+			}
+		}
 	}
 	if t.HeadingID != nil {
-		lines = append(lines, "Heading: "+resolveName(m.headingNamesByID, *t.HeadingID))
+		relations = append(relations, label("Heading:")+" "+resolveName(m.headingNamesByID, *t.HeadingID))
 	}
+	if len(relations) > 0 {
+		groups = append(groups, relations)
+	}
+
+	// Group: Tags
 	if len(t.Tags) > 0 {
 		names := make([]string, 0, len(t.Tags))
 		for _, tg := range t.Tags {
 			names = append(names, resolveName(m.tagNamesByID, tg))
 		}
-		lines = append(lines, "Tags: "+strings.Join(names, ", "))
+		groups = append(groups, []string{label("Tags:") + " " + strings.Join(names, ", ")})
 	}
+
+	// Group: Someday flag
 	if t.Someday {
-		lines = append(lines, m.theme.Dim.Render("Someday"))
+		groups = append(groups, []string{m.theme.Dim.Render("Someday")})
 	}
-	return strings.Join(lines, "\n")
+
+	// Join groups with one blank line between each non-empty group.
+	var out []string
+	for i, g := range groups {
+		if i > 0 {
+			out = append(out, "")
+		}
+		out = append(out, g...)
+	}
+	return strings.Join(out, "\n")
 }
