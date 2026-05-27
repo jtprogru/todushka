@@ -1,0 +1,21 @@
+{
+  "feature": "viewport-scroll",
+  "phase": "done",
+  "created_at": "2026-05-27T17:25:25Z",
+  "current_artifact": null,
+  "history": [
+    {"phase": "explore", "artifact": ".spec/features/viewport-scroll/explore.md", "approved_at": "2026-05-27T17:32:21Z"},
+    {"phase": "requirements", "artifact": ".spec/features/viewport-scroll/requirements.md", "approved_at": "2026-05-27T17:34:16Z"},
+    {"phase": "design", "artifact": ".spec/features/viewport-scroll/design.md", "approved_at": "2026-05-27T17:42:41Z"},
+    {"phase": "task-plan", "artifact": ".spec/features/viewport-scroll/task-plan.md", "approved_at": "2026-05-27T17:48:06Z"},
+    {"phase": "implementation", "artifact": ".spec/features/viewport-scroll/implementation.md", "approved_at": "2026-05-27T17:57:41Z"},
+    {"phase": "review", "artifact": ".spec/features/viewport-scroll/review.md", "approved_at": "2026-05-27T18:04:11Z"}
+  ],
+  "review_base_commit": "47f43e722fc5206d8a93e7d28d09a1f518bd1129",
+  "branch": "feature/viewport-scroll",
+  "worktree": null,
+  "last_completed_task": null,
+  "finish_action": "pr",
+  "finished_at": "2026-05-27T18:04:39Z",
+  "finish_base": null
+}
