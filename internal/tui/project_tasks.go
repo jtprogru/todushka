@@ -51,10 +51,29 @@ func viewProjectTasks(m Model, width int) string {
 		}
 		return header + "\n" + m.theme.Dim.Render("  (no tasks in this project)")
 	}
+	// Apply viewport scroll (BL-7). Header + blank line occupy 2 rows.
+	vr := visibleRows(m) - 2
+	off := m.scrollOffset
+	if vr > 0 && len(disp) > vr {
+		if off > len(disp)-vr {
+			off = len(disp) - vr
+		}
+		if off < 0 {
+			off = 0
+		}
+		end := off + vr
+		if end > len(disp) {
+			end = len(disp)
+		}
+		disp = disp[off:end]
+	} else {
+		off = 0
+	}
 	lines := []string{header, ""}
 	for i, t := range disp {
+		absIdx := i + off
 		marker := "  "
-		if i == m.cursor {
+		if absIdx == m.cursor {
 			marker = m.theme.Selected.Render("> ")
 		}
 		icon := "  "
