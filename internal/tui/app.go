@@ -16,6 +16,7 @@ import (
 	"github.com/jtprogru/todushka/internal/app"
 	"github.com/jtprogru/todushka/internal/config"
 	"github.com/jtprogru/todushka/internal/domain/id"
+	"github.com/jtprogru/todushka/internal/domain/project"
 	"github.com/jtprogru/todushka/internal/domain/task"
 )
 
@@ -43,7 +44,7 @@ type Model struct {
 
 	tagNamesByID     map[id.ID]string
 	areaNamesByID    map[id.ID]string
-	projectNamesByID map[id.ID]string
+	projectsByID     map[id.ID]project.Project
 	headingNamesByID map[id.ID]string
 
 	height     int
@@ -73,7 +74,7 @@ func NewModel(svc *app.Service, theme Theme, cfg config.AppConfig) Model {
 		selected:         make(map[id.ID]struct{}),
 		tagNamesByID:     make(map[id.ID]string),
 		areaNamesByID:    make(map[id.ID]string),
-		projectNamesByID: make(map[id.ID]string),
+		projectsByID:     make(map[id.ID]project.Project),
 		headingNamesByID: make(map[id.ID]string),
 		config:           cfg,
 		listCounts:       make(map[listKind]int),
@@ -125,7 +126,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.areaNamesByID[k] = v
 		}
 		for k, v := range msg.projects {
-			m.projectNamesByID[k] = v
+			m.projectsByID[k] = v
 		}
 		for k, v := range msg.headings {
 			m.headingNamesByID[k] = v

@@ -10,12 +10,12 @@
 `start:YYYY-MM-DD due:YYYY-MM-DD` после заголовка — это перегружает
 список.
 
-#### BL-1.1 — Перенести даты в details pane
+#### BL-1.1 — Перенести даты в details pane ✅ done (details-pane-redesign)
 Поля `start`, `due` (и потенциально остальные) лучше показывать в
 секции подробностей. Каждое имя поля — явно выделено цветом и жирным;
 между полями — пустая строка для воздуха.
 
-### BL-2 — Уменьшить details pane до ≤ 40% ширины
+### BL-2 — Уменьшить details pane до ≤ 40% ширины ✅ done (details-pane-redesign)
 Сейчас правая панель занимает ~55% (config `list_pane_share: 0.45`).
 Сделать `list_pane_share ≥ 0.6` либо инвертировать смысл field. Хочется
 чтобы details ≤ 40%.
@@ -32,7 +32,7 @@ icon/short/dates. Перенос должен быть строго в пред�
 
 ## Details pane
 
-### BL-6 — В details показать инфо о проекте
+### BL-6 — В details показать инфо о проекте ✅ done (details-pane-redesign)
 Сейчас в details pane нет данных о проекте задачи (только tags, area).
 Добавить project name + heading. Возможно ещё что-то — нужен короткий
 explore phase прежде чем фиксировать scope.
@@ -59,9 +59,9 @@ explore phase прежде чем фиксировать scope.
 
 1. ~~**list-rendering-polish** (BL-1, BL-3, BL-4)~~ ✅ done — рендеринг
    списка и разделителей. Один fast-track цикл.
-2. **details-pane-redesign** (BL-1.1, BL-2, BL-6) — переработка
-   details pane: ширина, контент, стилизация. Один full pipeline
-   (затрагивает layout + data fetching).
+2. ~~**details-pane-redesign** (BL-1.1, BL-2, BL-6)~~ ✅ done —
+   переработка details pane: ширина, контент, стилизация. Один full
+   pipeline (затрагивает layout + data fetching).
 3. **project-navigation** (BL-5) — отдельный full pipeline, самый
    большой scope.
 

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"github.com/jtprogru/todushka/internal/domain/id"
+	"github.com/jtprogru/todushka/internal/domain/project"
 	"github.com/jtprogru/todushka/internal/domain/task"
 )
 
@@ -87,7 +88,7 @@ func (l listKind) String() string {
 type nameCacheLoadedMsg struct {
 	tags     map[id.ID]string
 	areas    map[id.ID]string
-	projects map[id.ID]string
+	projects map[id.ID]project.Project
 	headings map[id.ID]string
 }
 

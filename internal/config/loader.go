@@ -86,7 +86,7 @@ theme: macchiato
 dual_pane_min_width: 100
 
 # Fraction of width allocated to the list pane in dual-pane mode (0.0 - 1.0).
-list_pane_share: 0.45
+list_pane_share: 0.60
 
 # Minimum number of selected tasks before a bulk operation requires confirmation.
 bulk_confirm_threshold: 5
