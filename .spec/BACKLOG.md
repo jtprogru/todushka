@@ -45,6 +45,16 @@ CRUD через `ProjectEditorModel`, service `DeleteProject` с reassign
 задач в Inbox. Headings management / bulk-move задач между проектами /
 area picker — deferred v2 (если понадобятся, отдельный pipeline).
 
+## Bugs
+
+### BL-7 — Курсор уезжает за пределы экрана при overflow
+В `viewList` / `viewProjectList` / `viewProjectTasks` сейчас рендерятся
+**все** задачи/проекты целиком, без учёта доступной высоты `bodyH`.
+Когда строк больше чем влезает на экран, `View()` обрезает overflow
+через lipgloss height-clamp, но курсор продолжает двигаться по списку
+— пользователь не видит, что выбрано. Нужен viewport со
+scroll-offset, который следит за курсором (edge-follow + scrolloff).
+
 ## Группировка для планирования (предложение)
 
 Можно сгруппировать в 3 будущих feature-pipeline'а:
