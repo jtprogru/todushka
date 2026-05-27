@@ -60,10 +60,6 @@ type Model struct {
 	projectTasks        []task.Task
 	projectEditor       ProjectEditorModel
 	editingProject      bool
-
-	// Viewport scroll state (BL-7)
-	scrollOffset        int
-	projectScrollOffset int
 }
 
 // allLists is the canonical order used by Tab/Shift+Tab cycling and the header.
@@ -124,7 +120,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cursor >= len(m.tasks) {
 			m.cursor = max(0, len(m.tasks)-1)
 		}
-		m.scrollOffset = ensureCursorVisible(m.cursor, m.scrollOffset, visibleRows(m), scrolloff, len(displayedTasks(m)))
 		return m, tea.Batch(
 			fetchNameCache(m.service, m.tasks),
 			fetchListCounts(m.service),
@@ -147,7 +142,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.projectCursor >= len(displayedProjects(m)) {
 			m.projectCursor = max(0, len(displayedProjects(m))-1)
 		}
-		m.projectScrollOffset = ensureCursorVisible(m.projectCursor, m.projectScrollOffset, visibleRows(m), scrolloff, len(displayedProjects(m)))
 		return m, fetchAreaNames(m.service, areaIDs)
 
 	case projectTasksLoadedMsg:
@@ -162,7 +156,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cursor >= len(msg.tasks) {
 			m.cursor = max(0, len(msg.tasks)-1)
 		}
-		m.scrollOffset = ensureCursorVisible(m.cursor, m.scrollOffset, visibleRows(m), scrolloff, len(displayedTasks(m)))
 		return m, fetchNameCache(m.service, msg.tasks)
 
 	case projectSavedMsg:
@@ -308,7 +301,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Projects):
 		m.screen = screenProjects
 		m.projectCursor = 0
-		m.projectScrollOffset = 0
 		m.filterQuery = ""
 		m.filtering = false
 		return m, fetchProjects(m.service, m.projectStatusFilter == psfAll)
@@ -347,13 +339,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.cursor > 0 {
 			m.cursor--
 		}
-		m.scrollOffset = ensureCursorVisible(m.cursor, m.scrollOffset, visibleRows(m), scrolloff, len(displayedTasks(m)))
 		return m, nil
 	case key.Matches(msg, m.keys.Down):
 		if m.cursor < len(m.tasks)-1 {
 			m.cursor++
 		}
-		m.scrollOffset = ensureCursorVisible(m.cursor, m.scrollOffset, visibleRows(m), scrolloff, len(displayedTasks(m)))
 		return m, nil
 	case key.Matches(msg, m.keys.Enter):
 		return m.openEditor()
@@ -483,26 +473,22 @@ func (m Model) handleProjectsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.CloseModal):
 		m.screen = screenList
 		m.projectCursor = 0
-		m.projectScrollOffset = 0
 		m.filterQuery = ""
 		return m, nil
 	case key.Matches(msg, m.keys.Projects):
 		m.screen = screenList
 		m.projectCursor = 0
-		m.projectScrollOffset = 0
 		m.filterQuery = ""
 		return m, nil
 	case key.Matches(msg, m.keys.Up):
 		if m.projectCursor > 0 {
 			m.projectCursor--
 		}
-		m.projectScrollOffset = ensureCursorVisible(m.projectCursor, m.projectScrollOffset, visibleRows(m), scrolloff, len(displayedProjects(m)))
 		return m, nil
 	case key.Matches(msg, m.keys.Down):
 		if m.projectCursor < len(displayedProjects(m))-1 {
 			m.projectCursor++
 		}
-		m.projectScrollOffset = ensureCursorVisible(m.projectCursor, m.projectScrollOffset, visibleRows(m), scrolloff, len(displayedProjects(m)))
 		return m, nil
 	case key.Matches(msg, m.keys.Filter):
 		m.filtering = true
@@ -514,7 +500,6 @@ func (m Model) handleProjectsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.projectStatusFilter = psfOpen
 		}
-		m.projectScrollOffset = 0
 		return m, fetchProjects(m.service, m.projectStatusFilter == psfAll)
 	case key.Matches(msg, m.keys.QuickEntry):
 		// 'n' in screenProjects = new project (REQ-3.1).
@@ -558,7 +543,6 @@ func (m Model) handleProjectsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.screen = screenProjectTasks
 		m.activeProjectID = &pid
 		m.cursor = 0
-		m.scrollOffset = 0
 		m.filterQuery = ""
 		m.filtering = false
 		m.selected = make(map[id.ID]struct{})
@@ -604,7 +588,6 @@ func (m Model) handleProjectTasksKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.projectTasks = nil
 		m.tasks = nil
 		m.cursor = 0
-		m.scrollOffset = 0
 		m.selected = make(map[id.ID]struct{})
 		return m, fetchProjects(m.service, m.projectStatusFilter == psfAll)
 	}
@@ -641,13 +624,11 @@ func (m Model) handleProjectTasksKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.cursor > 0 {
 			m.cursor--
 		}
-		m.scrollOffset = ensureCursorVisible(m.cursor, m.scrollOffset, visibleRows(m), scrolloff, len(displayedTasks(m)))
 		return m, nil
 	case key.Matches(msg, m.keys.Down):
 		if m.cursor < len(m.tasks)-1 {
 			m.cursor++
 		}
-		m.scrollOffset = ensureCursorVisible(m.cursor, m.scrollOffset, visibleRows(m), scrolloff, len(displayedTasks(m)))
 		return m, nil
 	case key.Matches(msg, m.keys.Enter):
 		return m.openEditor()
@@ -725,7 +706,6 @@ func (m Model) switchList(l listKind) (tea.Model, tea.Cmd) {
 	m.selected = make(map[id.ID]struct{})
 	m.activeList = l
 	m.cursor = 0
-	m.scrollOffset = 0
 	return m, m.loadCurrentList()
 }
 
@@ -1002,28 +982,14 @@ func (m Model) viewList() string {
 	if isDualPane(m) {
 		paneWidth, _ = paneWidths(m)
 	}
-	// Apply viewport scroll (BL-7).
-	vr := visibleRows(m)
-	off := m.scrollOffset
-	if vr > 0 && len(disp) > vr {
-		if off > len(disp)-vr {
-			off = len(disp) - vr
-		}
-		if off < 0 {
-			off = 0
-		}
-		end := off + vr
-		if end > len(disp) {
-			end = len(disp)
-		}
-		disp = disp[off:end]
-	} else {
-		off = 0
-	}
-	lines := make([]string, 0, len(disp))
+	// Render every task row and remember which line in the output
+	// hosts the cursor's first line. Windowing then happens in line
+	// space (BL-7): logical-row scroll is incorrect when titles wrap
+	// because lipgloss MaxHeight clamps the rendered string by lines.
+	var lines []string
+	cursorLineIdx := -1
 	showPrefix := len(m.selected) > 0
 	for i, t := range disp {
-		absIdx := i + off
 		prefix := ""
 		if showPrefix {
 			if _, ok := m.selected[t.ID]; ok {
@@ -1033,7 +999,7 @@ func (m Model) viewList() string {
 			}
 		}
 		marker := "  "
-		if absIdx == m.cursor {
+		if i == m.cursor {
 			marker = m.theme.Selected.Render("> ")
 		}
 		icon := "  "
@@ -1062,10 +1028,13 @@ func (m Model) viewList() string {
 			}
 		}
 
+		if i == m.cursor {
+			cursorLineIdx = len(lines)
+		}
 		lines = append(lines, firstLinePrefix+titleLines[0])
 		lines = append(lines, titleLines[1:]...)
 	}
-	return strings.Join(lines, "\n")
+	return windowLines(lines, cursorLineIdx, visibleRows(m), scrolloff)
 }
 
 func (m Model) viewQuickEntry() string {

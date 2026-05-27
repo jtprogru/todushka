@@ -1,65 +1,66 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 // scrolloff is the minimum number of rows kept visible above and below
 // the cursor before the viewport starts following it. Mirrors vim's
 // `scrolloff=3` default.
 const scrolloff = 3
 
-// ensureCursorVisible returns a new scrollOffset such that `cursor` is
-// rendered within the window [offset, offset+visibleCount), with at
-// least `scrolloff` rows of buffer above and below (clamped by the list
-// ends and the visibleCount).
+// windowLines returns a slice of `lines` of length up to `visibleRows`
+// that contains `cursorLineIdx` with at least `scrolloff` lines of
+// buffer above and below (clamped by the start/end of `lines`).
+// When `visibleRows <= 0` or `len(lines) <= visibleRows`, the entire
+// list is joined (no truncation). When `cursorLineIdx < 0` (cursor
+// not in current view), the window is taken from the start.
 //
-//   - If visibleCount <= 0 or totalCount <= visibleCount, the result is 0:
-//     everything fits or nothing renders.
-//   - If cursor < 0, it is treated as 0 (defensive).
-//   - The returned offset is always clamped to [0, max(0, totalCount-visibleCount)].
-func ensureCursorVisible(cursor, offset, visibleCount, scrolloff, totalCount int) int {
-	if visibleCount <= 0 {
-		return 0
+// Line-space windowing is the correct model for the renderer because
+// lipgloss `MaxHeight` clamps the body by lines, not by logical rows;
+// when titles wrap into multiple lines a logical-row offset can place
+// the cursor row past the clamp.
+func windowLines(lines []string, cursorLineIdx, visibleRows, scrolloff int) string {
+	if visibleRows <= 0 || len(lines) <= visibleRows {
+		return strings.Join(lines, "\n")
 	}
-	if totalCount <= visibleCount {
-		return 0
+	if cursorLineIdx < 0 {
+		return strings.Join(lines[:visibleRows], "\n")
 	}
-	if cursor < 0 {
-		cursor = 0
+	start := cursorLineIdx - scrolloff
+	if start < 0 {
+		start = 0
 	}
-	if cursor >= totalCount {
-		cursor = totalCount - 1
+	end := start + visibleRows
+	if end > len(lines) {
+		end = len(lines)
+		start = end - visibleRows
+		if start < 0 {
+			start = 0
+		}
 	}
-	maxOffset := totalCount - visibleCount
-
-	// Hard bounds — cursor must be inside [offset, offset+visibleCount).
-	// These also dominate when visibleCount < 2*scrolloff+1 (narrow window
-	// where both buffer rules would otherwise conflict).
-	minOffset := cursor - visibleCount + 1
-	if minOffset < 0 {
-		minOffset = 0
+	// Hard-bounds re-anchor — guarantees cursor visible even when the
+	// window is narrower than the buffer (visibleRows < 2*scrolloff+1).
+	if cursorLineIdx >= end {
+		end = cursorLineIdx + 1
+		if end > len(lines) {
+			end = len(lines)
+		}
+		start = end - visibleRows
+		if start < 0 {
+			start = 0
+		}
 	}
-	maxOffsetForCursor := cursor
-	if maxOffsetForCursor > maxOffset {
-		maxOffsetForCursor = maxOffset
+	if cursorLineIdx < start {
+		start = cursorLineIdx
+		end = start + visibleRows
+		if end > len(lines) {
+			end = len(lines)
+		}
 	}
-
-	// Top buffer: cursor approaching the top of the window.
-	if cursor-offset < scrolloff {
-		offset = cursor - scrolloff
-	}
-	// Bottom buffer: cursor approaching the bottom of the window.
-	if cursor-offset > visibleCount-1-scrolloff {
-		offset = cursor - visibleCount + 1 + scrolloff
-	}
-
-	// Clamp into [minOffset, maxOffsetForCursor]: guarantees cursor visible.
-	if offset < minOffset {
-		offset = minOffset
-	}
-	if offset > maxOffsetForCursor {
-		offset = maxOffsetForCursor
-	}
-	return offset
+	return strings.Join(lines[start:end], "\n")
 }
 
 // visibleRows reports how many list rows can be rendered in the body
