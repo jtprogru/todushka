@@ -559,13 +559,13 @@ func (m Model) viewBody() string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }
 
-// renderSeparator returns a one-line horizontal "─" rule of width characters,
+// renderSeparator returns a one-line horizontal "━" rule of width characters,
 // styled via theme.Help. Returns "" if width <= 0.
 func renderSeparator(theme Theme, width int) string {
 	if width <= 0 {
 		return ""
 	}
-	return theme.Help.Render(strings.Repeat("─", width))
+	return theme.Help.Render(strings.Repeat("━", width))
 }
 
 func (m Model) View() string {
@@ -614,6 +614,26 @@ func (m Model) editorWidth() int {
 	return m.width
 }
 
+// wrapTitleColumn soft-wraps title to availWidth (lipgloss-width counted)
+// and prepends prefixWidth ASCII spaces to lines [1..]. Returns
+// []string{title} when availWidth <= 0 or prefixWidth <= 0 (no-op
+// safeguard for unknown terminal size or degenerate narrow panes).
+func wrapTitleColumn(title string, prefixWidth, availWidth int) []string {
+	if availWidth <= 0 || prefixWidth <= 0 {
+		return []string{title}
+	}
+	wrapped := lipgloss.NewStyle().Width(availWidth).Render(title)
+	parts := strings.Split(wrapped, "\n")
+	if len(parts) == 1 {
+		return parts
+	}
+	indent := strings.Repeat(" ", prefixWidth)
+	for i := 1; i < len(parts); i++ {
+		parts[i] = indent + parts[i]
+	}
+	return parts
+}
+
 func (m Model) viewList() string {
 	disp := displayedTasks(m)
 	if len(disp) == 0 {
@@ -621,6 +641,10 @@ func (m Model) viewList() string {
 			return m.theme.Dim.Render("\n  (no matches)\n")
 		}
 		return m.theme.Dim.Render("\n  (no tasks)\n")
+	}
+	paneWidth := m.width
+	if isDualPane(m) {
+		paneWidth, _ = paneWidths(m)
 	}
 	lines := make([]string, 0, len(disp))
 	showPrefix := len(m.selected) > 0
@@ -644,24 +668,27 @@ func (m Model) viewList() string {
 		case task.StatusCancelled:
 			icon = m.theme.StatusError.Render("✗ ")
 		}
-		title := t.Title
-		dates := ""
-		if t.StartDate != nil {
-			dates += " start:" + t.StartDate.Format("2006-01-02")
-		}
-		if t.Deadline != nil {
-			dl := " due:" + t.Deadline.Format("2006-01-02")
-			dates += m.theme.Deadline.Render(dl)
-		}
+		short := m.theme.Dim.Render(id.Short(t.ID))
+		firstLinePrefix := fmt.Sprintf("%s%s%s%s  ", prefix, marker, icon, short)
+		prefixWidth := lipgloss.Width(firstLinePrefix)
+
+		titleLines := wrapTitleColumn(t.Title, prefixWidth, paneWidth-prefixWidth)
+
 		if t.Status == task.StatusCompleted || t.Status == task.StatusCancelled {
 			done := lipgloss.NewStyle().Strikethrough(true).Faint(true)
-			title = done.Render(title)
-			if dates != "" {
-				dates = done.Render(dates)
+			for j := range titleLines {
+				if j == 0 {
+					titleLines[j] = done.Render(titleLines[j])
+					continue
+				}
+				content := strings.TrimLeft(titleLines[j], " ")
+				indentLen := len(titleLines[j]) - len(content)
+				titleLines[j] = strings.Repeat(" ", indentLen) + done.Render(content)
 			}
 		}
-		short := m.theme.Dim.Render(id.Short(t.ID))
-		lines = append(lines, fmt.Sprintf("%s%s%s%s  %s%s", prefix, marker, icon, short, title, dates))
+
+		lines = append(lines, firstLinePrefix+titleLines[0])
+		lines = append(lines, titleLines[1:]...)
 	}
 	return strings.Join(lines, "\n")
 }

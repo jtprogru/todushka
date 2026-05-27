@@ -408,9 +408,9 @@ func TestProp_CountsMatchService(t *testing.T) {
 
 func TestRenderSeparator_FullWidth(t *testing.T) {
 	s := renderSeparator(NewTheme(), 80)
-	// Strip ANSI escapes to count "─" reliably. lipgloss adds them around content.
-	// Simpler: count occurrences of "─" rune.
-	count := strings.Count(s, "─")
+	// Strip ANSI escapes to count "━" reliably. lipgloss adds them around content.
+	// Simpler: count occurrences of "━" rune.
+	count := strings.Count(s, "━")
 	require.Equal(t, 80, count, "separator should contain exactly 80 box-drawing rune characters")
 }
 
@@ -429,10 +429,10 @@ func TestView_HasSeparatorsInFullScreen(t *testing.T) {
 	m.width = 120
 	m.height = 40
 	out := m.View()
-	require.Contains(t, out, "─", "full-screen view should contain separator rune")
-	// Count: 2 separator rows × 120 width = 240 "─" runes
-	count := strings.Count(out, "─")
-	require.GreaterOrEqual(t, count, 240, "expected at least 240 ─ characters (2 rows × 120 width)")
+	require.Contains(t, out, "━", "full-screen view should contain separator rune")
+	// Count: 2 separator rows × 120 width = 240 "━" runes
+	count := strings.Count(out, "━")
+	require.GreaterOrEqual(t, count, 240, "expected at least 240 ━ characters (2 rows × 120 width)")
 }
 
 func TestView_NoSeparatorsInLegacy(t *testing.T) {
@@ -440,7 +440,7 @@ func TestView_NoSeparatorsInLegacy(t *testing.T) {
 	m.width = 120
 	m.height = 5 // below threshold
 	out := m.View()
-	require.NotContains(t, out, "─", "legacy mode must not render section separators")
+	require.NotContains(t, out, "━", "legacy mode must not render section separators")
 }
 
 func TestView_NoSeparatorsInEditor(t *testing.T) {
@@ -451,10 +451,10 @@ func TestView_NoSeparatorsInEditor(t *testing.T) {
 	m.editor = NewEditor(context.Background(), m.tasks[0], svc)
 	out := m.View()
 	// The editor's own border decorations include "─" characters, but the
-	// full-width section separators (m.width consecutive "─") must not be
+	// full-width section separators (m.width consecutive "━") must not be
 	// rendered in editor mode (REQ-4.5). We assert absence of a full-width
-	// horizontal rule by checking for a run of m.width "─" runes.
-	fullWidthRule := strings.Repeat("─", m.width)
+	// horizontal rule by checking for a run of m.width "━" runes.
+	fullWidthRule := strings.Repeat("━", m.width)
 	require.NotContains(t, out, fullWidthRule, "editor mode must not render full-width section separators")
 }
 
@@ -482,7 +482,7 @@ func TestProp_SeparatorsConditional(t *testing.T) {
 		m.screen = screenList
 		m.confirm = nil
 		out := m.View()
-		fullWidthRule := strings.Repeat("─", m.width)
+		fullWidthRule := strings.Repeat("━", m.width)
 		sepActive := m.height >= 10 && m.width >= 40
 		if sepActive {
 			require.Contains(rt, out, fullWidthRule, "expected section separator")
@@ -498,7 +498,7 @@ func TestProp_SeparatorWidth(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		w := rapid.IntRange(40, 200).Draw(rt, "width")
 		s := renderSeparator(NewTheme(), w)
-		count := strings.Count(s, "─")
+		count := strings.Count(s, "━")
 		require.Equal(rt, w, count)
 	})
 }
