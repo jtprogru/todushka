@@ -51,29 +51,15 @@ func viewProjectTasks(m Model, width int) string {
 		}
 		return header + "\n" + m.theme.Dim.Render("  (no tasks in this project)")
 	}
-	// Apply viewport scroll (BL-7). Header + blank line occupy 2 rows.
-	vr := visibleRows(m) - 2
-	off := m.scrollOffset
-	if vr > 0 && len(disp) > vr {
-		if off > len(disp)-vr {
-			off = len(disp) - vr
-		}
-		if off < 0 {
-			off = 0
-		}
-		end := off + vr
-		if end > len(disp) {
-			end = len(disp)
-		}
-		disp = disp[off:end]
-	} else {
-		off = 0
-	}
-	lines := []string{header, ""}
+	// Build row-by-row, track cursor line, then window in line space (BL-7).
+	rowLines := []string{}
+	cursorLineIdx := -1
 	for i, t := range disp {
-		absIdx := i + off
+		if i == m.cursor {
+			cursorLineIdx = len(rowLines)
+		}
 		marker := "  "
-		if absIdx == m.cursor {
+		if i == m.cursor {
 			marker = m.theme.Selected.Render("> ")
 		}
 		icon := "  "
@@ -93,11 +79,12 @@ func viewProjectTasks(m Model, width int) string {
 			}
 		}
 		row := fmt.Sprintf("%s%s%s  %s", marker, icon, short, title)
-		lines = append(lines, row)
+		rowLines = append(rowLines, row)
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+	// Header + blank line consume 2 of visibleRows.
+	body := windowLines(rowLines, cursorLineIdx, visibleRows(m)-2, scrolloff)
+	return lipgloss.JoinVertical(lipgloss.Left, header, "", body)
 }
 
-// keep strings import to satisfy go vet for indirect TrimSpace usage
-// (handleFilterKey is in a sibling file and reaches into m.filterQuery).
 var _ = strings.TrimSpace
+var _ = lipgloss.JoinVertical
