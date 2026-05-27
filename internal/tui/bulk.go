@@ -21,9 +21,12 @@ const (
 )
 
 // confirmState tracks a pending bulk operation awaiting user confirmation.
+// When projectID is non-nil, the pending operation is a project delete
+// (BL-5); action/ids are then ignored.
 type confirmState struct {
-	action bulkAction
-	ids    []id.ID
+	action    bulkAction
+	ids       []id.ID
+	projectID *id.ID
 }
 
 func (a bulkAction) label() string {
@@ -147,6 +150,16 @@ func handleConfirmKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	c := m.confirm
 	m.confirm = nil
 	if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && msg.Runes[0] == 'y' {
+		if c.projectID != nil {
+			pid := *c.projectID
+			svc := m.service
+			return m, func() tea.Msg {
+				if err := svc.DeleteProject(context.Background(), pid, true); err != nil {
+					return errorMsg{err}
+				}
+				return projectDeletedMsg{projectID: pid}
+			}
+		}
 		if len(c.ids) == 1 {
 			return singleActionByID(m, c.action, c.ids[0])
 		}
