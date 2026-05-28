@@ -63,6 +63,28 @@ func windowLines(lines []string, cursorLineIdx, visibleRows, scrolloff int) stri
 	return strings.Join(lines[start:end], "\n")
 }
 
+// pageStep reports how many rows PgUp/PgDown moves the cursor: one
+// bodyful of rows (visibleRows). Falls back to a sane default before the
+// first WindowSizeMsg so paging still works when the terminal size is
+// not yet known.
+func pageStep(m Model) int {
+	if v := visibleRows(m); v > 0 {
+		return v
+	}
+	return 10
+}
+
+// clampCursor bounds idx to [0, n-1]; returns 0 when n <= 0.
+func clampCursor(idx, n int) int {
+	if n <= 0 || idx < 0 {
+		return 0
+	}
+	if idx > n-1 {
+		return n - 1
+	}
+	return idx
+}
+
 // visibleRows reports how many list rows can be rendered in the body
 // pane: m.height - height(viewHeader) - height(viewFooter) - 2
 // (two separator rows). Returns 0 before the first WindowSizeMsg

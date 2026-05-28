@@ -13,6 +13,8 @@ type KeyMap struct {
 	Logbook           key.Binding
 	Up                key.Binding
 	Down              key.Binding
+	PageUp            key.Binding
+	PageDown          key.Binding
 	Enter             key.Binding
 	QuickEntry        key.Binding
 	Complete          key.Binding
@@ -46,6 +48,8 @@ func DefaultKeyMap() KeyMap {
 		Logbook:           key.NewBinding(key.WithKeys("6"), key.WithHelp("6", "Logbook")),
 		Up:                key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k / ↑", "up")),
 		Down:              key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j / ↓", "down")),
+		PageUp:            key.NewBinding(key.WithKeys("pgup", "ctrl+b"), key.WithHelp("PgUp / Ctrl+B", "page up")),
+		PageDown:          key.NewBinding(key.WithKeys("pgdown", "ctrl+f"), key.WithHelp("PgDn / Ctrl+F", "page down")),
 		Enter:             key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "details")),
 		QuickEntry:        key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "quick entry")),
 		Complete:          key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "complete")),
