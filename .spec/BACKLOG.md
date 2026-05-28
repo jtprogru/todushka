@@ -94,17 +94,17 @@ scroll-offset, который следит за курсором (edge-follow + 
 
 ### Фаза A — визуальная идентичность (fast-track, без смены архитектуры)
 
-#### BL-9 — Progress ring у проектов
+#### BL-9 — Progress ring у проектов ✅ done (things-visual)
 `projectCounts [open,total]` / `CountProjectTasks` уже есть; сейчас
 показываются числом. Рендерить как кольцо прогресса (○ ◔ ◑ ◕ ●) рядом с
 именем проекта в `internal/tui/project_list.go` (опц. агрегат по area
 позже). Чистый рендер, без новых данных.
 
-#### BL-10 — Визуальные маркеры Today
-Жёлтая звезда у задач Today, когда они видны в Anytime; иконка-луна для
-This Evening (готовим под BL-12); полировка глифов completed/cancelled
-в `viewList` (`internal/tui/app.go`), акценты и воздух. Опирается на
-палитру в `internal/tui/style.go`.
+#### BL-10 — Визуальные маркеры Today ✅ done (things-visual)
+Реализовано: жёлтая звезда `★` у today-задач в списке Anytime (через
+`today.ComputeToday`), приглушение завершённых строк, стиль `Theme.Star`.
+Иконка-луна This Evening **не вошла** — перенесена в BL-12 (избегаем dead
+code до появления самого состояния This Evening).
 
 ### Фаза B — точность планирования (концептуальное ядро Things)
 
@@ -171,7 +171,7 @@ completed/cancelled визуально.
 
 Things 3 parity (новые pipeline'ы, по фазам — порядок = приоритет):
 
-5. **things-visual** (BL-9, BL-10) — фаза A, fast-track, без архитектуры.
+5. ~~**things-visual** (BL-9, BL-10) — фаза A, fast-track, без архитектуры.~~ ✅ done — кольцо прогресса + звезда «today» + faint завершённых; `Theme.Star` (релиз minor v0.11.0).
 6. **things-scheduling** (BL-11, BL-12, BL-13) — фаза B, full pipeline.
 7. **things-structure** (BL-14, BL-15, BL-16) — фаза C, можно дробить.
 8. **things-sidebar** (BL-17) — фаза D, крупный рефактор, последним.

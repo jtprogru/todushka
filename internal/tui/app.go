@@ -18,6 +18,7 @@ import (
 	"github.com/jtprogru/todushka/internal/domain/id"
 	"github.com/jtprogru/todushka/internal/domain/project"
 	"github.com/jtprogru/todushka/internal/domain/task"
+	"github.com/jtprogru/todushka/internal/domain/today"
 )
 
 const statusFadeDuration = 5 * time.Second
@@ -1044,6 +1045,15 @@ func (m Model) viewList() string {
 	if isDualPane(m) {
 		paneWidth, _ = paneWidths(m)
 	}
+	// today-set drives the ★ marker, shown only in the Anytime list
+	// (REQ-2.1..2.3): a task starred there is also scheduled for today.
+	var todaySet map[id.ID]struct{}
+	if m.activeList == listAnytime {
+		todaySet = make(map[id.ID]struct{})
+		for _, t := range today.ComputeToday(disp, time.Now(), 0) {
+			todaySet[t.ID] = struct{}{}
+		}
+	}
 	// Render every task row and remember which line in the output
 	// hosts the cursor's first line. Windowing then happens in line
 	// space (BL-7): logical-row scroll is incorrect when titles wrap
@@ -1064,6 +1074,16 @@ func (m Model) viewList() string {
 		if i == m.cursor {
 			marker = m.theme.Selected.Render("> ")
 		}
+		// Fixed-width (2-col) star slot keeps columns aligned whether or
+		// not a row is starred; present only in the Anytime list.
+		star := ""
+		if m.activeList == listAnytime {
+			if _, ok := todaySet[t.ID]; ok {
+				star = m.theme.Star.Render("★") + " "
+			} else {
+				star = "  "
+			}
+		}
 		icon := "  "
 		switch t.Status {
 		case task.StatusCompleted:
@@ -1071,8 +1091,12 @@ func (m Model) viewList() string {
 		case task.StatusCancelled:
 			icon = m.theme.StatusError.Render("✗ ")
 		}
-		short := m.theme.Dim.Render(id.Short(t.ID))
-		firstLinePrefix := fmt.Sprintf("%s%s%s%s  ", prefix, marker, icon, short)
+		shortStyle := m.theme.Dim
+		if t.Status == task.StatusCompleted || t.Status == task.StatusCancelled {
+			shortStyle = shortStyle.Faint(true)
+		}
+		short := shortStyle.Render(id.Short(t.ID))
+		firstLinePrefix := fmt.Sprintf("%s%s%s%s%s  ", prefix, marker, star, icon, short)
 		prefixWidth := lipgloss.Width(firstLinePrefix)
 
 		titleLines := wrapTitleColumn(t.Title, prefixWidth, paneWidth-prefixWidth)

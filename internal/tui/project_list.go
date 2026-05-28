@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -76,6 +77,33 @@ func fetchAreaNames(svc *app.Service, areaIDs []id.ID) tea.Cmd {
 	}
 }
 
+// ringGlyphs maps a completion bucket to a circle glyph: index 0 = empty,
+// 4 = full. progressRing rounds the completed ratio to the nearest quarter
+// but reserves ◯ for 0% done and ● for 100% done so partial progress never
+// looks empty or complete.
+var ringGlyphs = []string{"◯", "◔", "◑", "◕", "●"}
+
+func progressRing(open, total int) string {
+	if total <= 0 {
+		return ringGlyphs[0]
+	}
+	done := total - open
+	if done <= 0 {
+		return ringGlyphs[0]
+	}
+	if done >= total {
+		return ringGlyphs[4]
+	}
+	k := int(math.Round(float64(done) / float64(total) * 4))
+	if k == 0 {
+		return ringGlyphs[1]
+	}
+	if k == 4 {
+		return ringGlyphs[3]
+	}
+	return ringGlyphs[k]
+}
+
 // projectStatusIcon returns a short rendered icon reflecting Status.
 // Open → blank, Completed → ✓ (info color), Cancelled → ✗ (error color).
 func projectStatusIcon(theme Theme, st project.Status) string {
@@ -122,7 +150,8 @@ func viewProjectList(m Model, width int) string {
 
 		var countsStr string
 		if c, ok := m.projectCounts[p.ID]; ok {
-			countsStr = m.theme.Dim.Render(fmt.Sprintf(" [%d/%d]", c[0], c[1]))
+			countsStr = " " + m.theme.Dim.Render(progressRing(c[0], c[1])) +
+				m.theme.Dim.Render(fmt.Sprintf(" [%d/%d]", c[0], c[1]))
 		}
 
 		var areaStr string
