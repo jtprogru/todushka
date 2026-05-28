@@ -20,21 +20,13 @@ type editorField int
 const (
 	fieldTitle editorField = iota
 	fieldNotes
-	fieldStart
-	fieldDeadline
-	fieldArea    // [NEW]
-	fieldProject // [NEW]
-	fieldHeading // [NEW]
-	fieldTags
 	fieldWhen
-	fieldCount // = 9
-)
-
-type shellEditorWhen int
-
-const (
-	whenAnytime shellEditorWhen = iota
-	whenSomeday
+	fieldDeadline
+	fieldArea
+	fieldProject
+	fieldHeading
+	fieldTags
+	fieldCount // = 8
 )
 
 // EditorModel is a form that edits a single Task. Tab/Shift+Tab cycle fields;
@@ -44,13 +36,15 @@ type EditorModel struct {
 
 	title    textinput.Model
 	notes    textarea.Model
-	start    textinput.Model
 	deadline textinput.Model
-	project  textinput.Model // [NEW]
-	heading  textinput.Model // [NEW]
+	project  textinput.Model
+	heading  textinput.Model
 	tags     textinput.Model
-	when     shellEditorWhen
 	focus    editorField
+
+	startDate  *task.Date  // chosen When start date (nil = none)
+	someday    bool        // chosen Someday state
+	whenPicker *whenPicker // non-nil while the When picker is open
 
 	areaID   *id.ID      // selected area (nil = Inbox)
 	areaName string      // display name of selected area ("" = Inbox)
@@ -70,13 +64,6 @@ func NewEditor(ctx context.Context, t task.Task, svc *app.Service) EditorModel {
 	notesIn.CharLimit = 4000
 	notesIn.SetHeight(4)
 
-	startIn := textinput.New()
-	startIn.Placeholder = "YYYY-MM-DD"
-	startIn.CharLimit = 10
-	if t.StartDate != nil {
-		startIn.SetValue(t.StartDate.Format("2006-01-02"))
-	}
-
 	dlIn := textinput.New()
 	dlIn.Placeholder = "YYYY-MM-DD"
 	dlIn.CharLimit = 10
@@ -89,11 +76,6 @@ func NewEditor(ctx context.Context, t task.Task, svc *app.Service) EditorModel {
 	tagsIn.CharLimit = 500
 	// We don't have tag names available here without a DB roundtrip; the
 	// model receives an external `tagNames` value via SetTagNames if needed.
-
-	when := whenAnytime
-	if t.Someday {
-		when = whenSomeday
-	}
 
 	var areaName string
 	if t.AreaID != nil {
@@ -126,18 +108,18 @@ func NewEditor(ctx context.Context, t task.Task, svc *app.Service) EditorModel {
 	}
 
 	return EditorModel{
-		original: t,
-		title:    titleIn,
-		notes:    notesIn,
-		start:    startIn,
-		deadline: dlIn,
-		project:  projectIn,
-		heading:  headingIn,
-		tags:     tagsIn,
-		when:     when,
-		focus:    fieldTitle,
-		areaID:   t.AreaID,
-		areaName: areaName,
+		original:  t,
+		title:     titleIn,
+		notes:     notesIn,
+		deadline:  dlIn,
+		project:   projectIn,
+		heading:   headingIn,
+		tags:      tagsIn,
+		focus:     fieldTitle,
+		startDate: t.StartDate,
+		someday:   t.Someday,
+		areaID:    t.AreaID,
+		areaName:  areaName,
 	}
 }
 
@@ -149,7 +131,6 @@ func (m *EditorModel) SetTagNames(names []string) {
 func (m *EditorModel) focusCurrent() tea.Cmd {
 	m.title.Blur()
 	m.notes.Blur()
-	m.start.Blur()
 	m.deadline.Blur()
 	m.project.Blur()
 	m.heading.Blur()
@@ -159,8 +140,6 @@ func (m *EditorModel) focusCurrent() tea.Cmd {
 		return m.title.Focus()
 	case fieldNotes:
 		return m.notes.Focus()
-	case fieldStart:
-		return m.start.Focus()
 	case fieldDeadline:
 		return m.deadline.Focus()
 	case fieldProject:
@@ -192,8 +171,6 @@ func (m EditorModel) UpdateForm(msg tea.Msg) (EditorModel, tea.Cmd) {
 		m.title, cmd = m.title.Update(msg)
 	case fieldNotes:
 		m.notes, cmd = m.notes.Update(msg)
-	case fieldStart:
-		m.start, cmd = m.start.Update(msg)
 	case fieldDeadline:
 		m.deadline, cmd = m.deadline.Update(msg)
 	case fieldProject:
@@ -212,18 +189,9 @@ func (m EditorModel) ApplyAndSave(ctx context.Context, svc *app.Service) (task.T
 	t := m.original
 	t.Title = strings.TrimSpace(m.title.Value())
 	t.Notes = strings.TrimSpace(m.notes.Value())
-	t.Someday = m.when == whenSomeday
+	t.Someday = m.someday
+	t.StartDate = m.startDate
 
-	if s := strings.TrimSpace(m.start.Value()); s == "" {
-		t.StartDate = nil
-	} else {
-		d, err := time.ParseInLocation("2006-01-02", s, time.Local)
-		if err != nil {
-			return task.Task{}, fmt.Errorf("start: %w", err)
-		}
-		nd := task.NewDate(d)
-		t.StartDate = &nd
-	}
 	if s := strings.TrimSpace(m.deadline.Value()); s == "" {
 		t.Deadline = nil
 	} else {
@@ -304,21 +272,6 @@ func (m EditorModel) ApplyAndSave(ctx context.Context, svc *app.Service) (task.T
 	return t, nil
 }
 
-// whenLabel returns the "When" section's primary label based on whether the
-// task is currently routed to Inbox (no Area/Project) or Anytime (has either).
-//
-//   - "Inbox"   when t.AreaID == nil AND t.ProjectID == nil
-//   - "Anytime" otherwise
-//
-// Pure function; called from View() to make the When label honest about the
-// task's actual bucket.
-func whenLabel(t task.Task) string {
-	if t.AreaID == nil && t.ProjectID == nil {
-		return "Inbox"
-	}
-	return "Anytime"
-}
-
 func splitTags(raw string) []string {
 	parts := strings.Split(raw, ",")
 	out := make([]string, 0, len(parts))
@@ -336,6 +289,9 @@ func splitTags(raw string) []string {
 func (m EditorModel) View(theme Theme, width int) string {
 	if m.picker != nil {
 		return m.picker.View(theme, width)
+	}
+	if m.whenPicker != nil {
+		return m.whenPicker.View(theme, width)
 	}
 	label := func(name string) string { return theme.Label.Render(name) }
 
@@ -355,36 +311,19 @@ func (m EditorModel) View(theme Theme, width int) string {
 		return label(name) + "\n" + style.Render(content)
 	}
 
-	anytimeBullet := "[ ]"
-	somedayBullet := "[ ]"
-	if m.when == whenAnytime {
-		anytimeBullet = "[•]"
-	} else {
-		somedayBullet = "[•]"
-	}
-	primaryLabel := whenLabel(m.original)
-	whenBody := fmt.Sprintf("%s %s\n%s Someday", anytimeBullet, primaryLabel, somedayBullet)
-	var whenSection string
-	if m.focus == fieldWhen {
-		whenSection = theme.Selected.Render("▶ When") + "\n" + theme.Selected.Render(whenBody)
-	} else {
-		whenSection = theme.Dim.Render("  When") + "\n" + theme.Dim.Render(whenBody)
-	}
-
 	body := lipgloss.JoinVertical(lipgloss.Left,
 		theme.Title.Render("Edit task"),
 		"",
 		field("Title", m.title.View(), m.focus == fieldTitle),
 		field("Notes", m.notes.View(), m.focus == fieldNotes),
-		field("Start", m.start.View(), m.focus == fieldStart),
+		field("When", whenDisplay(m.startDate, m.someday, time.Now()), m.focus == fieldWhen),
 		field("Deadline", m.deadline.View(), m.focus == fieldDeadline),
 		field("Area", areaDisplay, m.focus == fieldArea),
 		field("Project", m.project.View(), m.focus == fieldProject),
 		field("Heading", m.heading.View(), m.focus == fieldHeading),
 		field("Tags", m.tags.View(), m.focus == fieldTags),
-		whenSection,
 		"",
-		theme.Help.Render("Tab/Shift+Tab: field  Ctrl+S: save  Esc: cancel  Space: toggle When"),
+		theme.Help.Render("Tab/Shift+Tab: field  Ctrl+S: save  Esc: cancel  Enter: open When/Area"),
 	)
 	if m.err != "" {
 		body = lipgloss.JoinVertical(lipgloss.Left, body, theme.StatusError.Render(m.err))

@@ -426,6 +426,19 @@ func (m Model) handleEditorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if m.editor.whenPicker != nil {
+		np, res := m.editor.whenPicker.Update(msg)
+		m.editor.whenPicker = &np
+		switch res.outcome {
+		case whenCancel:
+			m.editor.whenPicker = nil
+		case whenSelected:
+			m.editor.startDate = res.startDate
+			m.editor.someday = res.someday
+			m.editor.whenPicker = nil
+		}
+		return m, nil
+	}
 	switch {
 	case key.Matches(msg, m.keys.CloseModal):
 		if m.activeProjectID != nil {
@@ -451,12 +464,9 @@ func (m Model) handleEditorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		p := newAreaPicker(areas, m.editor.areaID, "Inbox", m.readOnly)
 		m.editor.picker = &p
 		return m, nil
-	case m.editor.focus == fieldWhen && msg.Type == tea.KeySpace:
-		if m.editor.when == whenAnytime {
-			m.editor.when = whenSomeday
-		} else {
-			m.editor.when = whenAnytime
-		}
+	case m.editor.focus == fieldWhen && msg.Type == tea.KeyEnter:
+		wp := newWhenPicker(m.editor.startDate, m.editor.someday, time.Now())
+		m.editor.whenPicker = &wp
 		return m, nil
 	}
 	var cmd tea.Cmd

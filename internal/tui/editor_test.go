@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jtprogru/todushka/internal/app"
@@ -17,20 +18,22 @@ func TestEditor_WhenDefaultsAnytimeForOpenTask(t *testing.T) {
 	_, svc := newTestModelWithService(t)
 	tk := task.Task{ID: id.New(), Title: "x", Status: task.StatusOpen, Someday: false}
 	ed := NewEditor(context.Background(), tk, svc)
-	require.Equal(t, whenAnytime, ed.when)
+	require.False(t, ed.someday)
+	require.Nil(t, ed.startDate)
 }
 
 func TestEditor_WhenDefaultsSomedayForSomedayTask(t *testing.T) {
 	_, svc := newTestModelWithService(t)
 	tk := task.Task{ID: id.New(), Title: "x", Someday: true}
 	ed := NewEditor(context.Background(), tk, svc)
-	require.Equal(t, whenSomeday, ed.when)
+	require.True(t, ed.someday)
 }
 
 func TestEditor_ApplyAndSaveMapsAnytime(t *testing.T) {
 	_, svc, tasks := setupModelWithInboxTasks(t, "x")
 	ed := NewEditor(context.Background(), tasks[0], svc)
-	ed.when = whenAnytime
+	ed.someday = false
+	ed.startDate = nil
 	saved, err := ed.ApplyAndSave(context.Background(), svc)
 	require.NoError(t, err)
 	require.False(t, saved.Someday)
@@ -39,44 +42,10 @@ func TestEditor_ApplyAndSaveMapsAnytime(t *testing.T) {
 func TestEditor_ApplyAndSaveMapsSomeday(t *testing.T) {
 	_, svc, tasks := setupModelWithInboxTasks(t, "x")
 	ed := NewEditor(context.Background(), tasks[0], svc)
-	ed.when = whenSomeday
+	ed.someday = true
 	saved, err := ed.ApplyAndSave(context.Background(), svc)
 	require.NoError(t, err)
 	require.True(t, saved.Someday)
-}
-
-func TestWhenLabel_InboxForUnrelatedTask(t *testing.T) {
-	require.Equal(t, "Inbox", whenLabel(task.Task{}))
-}
-
-func TestWhenLabel_AnytimeForAreaTask(t *testing.T) {
-	aid := id.New()
-	require.Equal(t, "Anytime", whenLabel(task.Task{AreaID: &aid}))
-}
-
-func TestWhenLabel_AnytimeForProjectTask(t *testing.T) {
-	pid := id.New()
-	require.Equal(t, "Anytime", whenLabel(task.Task{ProjectID: &pid}))
-}
-
-func TestEditor_ViewShowsInboxLabel(t *testing.T) {
-	_, svc := newTestModelWithService(t)
-	tk := task.Task{ID: id.New(), Title: "x"}
-	ed := NewEditor(context.Background(), tk, svc)
-	out := ed.View(NewTheme(), 80)
-	require.Contains(t, out, "Inbox")
-	require.NotContains(t, out, "Anytime")
-}
-
-func TestEditor_ViewShowsAnytimeLabel(t *testing.T) {
-	_, svc := newTestModelWithService(t)
-	ctx := context.Background()
-	a, err := svc.AddArea(ctx, "work")
-	require.NoError(t, err)
-	tk := task.Task{ID: id.New(), Title: "x", AreaID: &a.ID}
-	ed := NewEditor(ctx, tk, svc)
-	out := ed.View(NewTheme(), 80)
-	require.Contains(t, out, "Anytime")
 }
 
 func TestEditor_ViewHidesOldHint(t *testing.T) {
@@ -87,46 +56,18 @@ func TestEditor_ViewHidesOldHint(t *testing.T) {
 	require.NotContains(t, out, "will appear in Inbox")
 }
 
-func TestEditor_FieldCountIsNine(t *testing.T) {
-	require.Equal(t, 9, int(fieldCount))
+func TestEditor_FieldCountIsEight(t *testing.T) {
+	require.Equal(t, 8, int(fieldCount))
 }
 
-// TestProp_WhenToggleInvolution verifies CP-5 (REQ-3.1, 3.3): toggling
-// the When radio twice always restores the original value.
-func TestProp_WhenToggleInvolution(t *testing.T) {
-	rapid.Check(t, func(rt *rapid.T) {
-		_, svc, _ := setupRapidModel(rt, "seed")
-		startSomeday := rapid.Bool().Draw(rt, "startSomeday")
-		tk := task.Task{ID: id.New(), Title: "x", Someday: startSomeday}
-		ed := NewEditor(context.Background(), tk, svc)
-		initial := ed.when
-		// Toggle twice via the editor space handler — simulating via m.editor manipulation
-		if ed.when == whenAnytime {
-			ed.when = whenSomeday
-		} else {
-			ed.when = whenAnytime
-		}
-		if ed.when == whenAnytime {
-			ed.when = whenSomeday
-		} else {
-			ed.when = whenAnytime
-		}
-		require.Equal(rt, initial, ed.when, "Space toggle is involutive")
-	})
-}
-
-// TestProp_WhenMapping verifies CP-6 (REQ-3.4): ApplyAndSave maps the
-// editor's When radio to task.Someday at save time.
+// TestProp_WhenMapping: ApplyAndSave maps the editor's someday state to
+// task.Someday at save time.
 func TestProp_WhenMapping(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		_, svc, tasks := setupRapidModel(rt, "x")
 		wantSomeday := rapid.Bool().Draw(rt, "wantSomeday")
 		ed := NewEditor(context.Background(), tasks[0], svc)
-		if wantSomeday {
-			ed.when = whenSomeday
-		} else {
-			ed.when = whenAnytime
-		}
+		ed.someday = wantSomeday
 		saved, err := ed.ApplyAndSave(context.Background(), svc)
 		require.NoError(rt, err)
 		require.Equal(rt, wantSomeday, saved.Someday)
@@ -578,10 +519,10 @@ func TestProp_ValidHeadingResolves(t *testing.T) {
 }
 
 // TestProp_FieldCountInvariant verifies CP-9: the editor always has
-// exactly 9 focusable fields (sanity / deterministic invariant).
+// exactly 8 focusable fields (sanity / deterministic invariant).
 func TestProp_FieldCountInvariant(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		require.Equal(rt, 9, int(fieldCount))
+		require.Equal(rt, 8, int(fieldCount))
 	})
 }
 
@@ -594,8 +535,8 @@ func TestProp_TabCycleOrder(t *testing.T) {
 		tk := task.Task{ID: id.New(), Title: "x"}
 		ed := NewEditor(context.Background(), tk, svc)
 		ed.focus = fieldTitle
-		// 9 nextField calls should return to fieldTitle
-		for i := 0; i < 9; i++ {
+		// fieldCount nextField calls should return to fieldTitle
+		for i := 0; i < int(fieldCount); i++ {
 			ed = ed.nextField()
 		}
 		require.Equal(rt, fieldTitle, ed.focus)
@@ -681,8 +622,8 @@ func TestEditor_ProjectHeadingResolveUnchanged(t *testing.T) {
 	require.Equal(t, h.ID, *saved.HeadingID)
 }
 
-// TestEditor_NonAreaFieldsSavePreserved locks that title/notes/start/
-// deadline/tags/when round-trip through ApplyAndSave unchanged.
+// TestEditor_NonAreaFieldsSavePreserved locks that title/notes/startDate/
+// deadline/tags/someday round-trip through ApplyAndSave unchanged.
 func TestEditor_NonAreaFieldsSavePreserved(t *testing.T) {
 	_, svc := newTestModelWithService(t)
 	ctx := context.Background()
@@ -691,10 +632,11 @@ func TestEditor_NonAreaFieldsSavePreserved(t *testing.T) {
 	ed := NewEditor(ctx, tk, svc)
 	ed.title.SetValue("renamed title")
 	ed.notes.SetValue("some notes")
-	ed.start.SetValue("2026-06-01")
+	sd := task.NewDate(time.Date(2026, 6, 1, 0, 0, 0, 0, time.Local))
+	ed.startDate = &sd
 	ed.deadline.SetValue("2026-07-01")
 	ed.tags.SetValue("alpha, beta")
-	ed.when = whenSomeday
+	ed.someday = true
 	saved, err := ed.ApplyAndSave(ctx, svc)
 	require.NoError(t, err)
 	require.Equal(t, "renamed title", saved.Title)
