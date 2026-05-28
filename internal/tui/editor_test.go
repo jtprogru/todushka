@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jtprogru/todushka/internal/app"
 	"github.com/jtprogru/todushka/internal/domain/id"
 	"github.com/jtprogru/todushka/internal/domain/task"
@@ -170,7 +171,9 @@ func TestEditor_NewEditorPrefillArea(t *testing.T) {
 	require.NoError(t, err)
 	tk := task.Task{ID: id.New(), Title: "x", AreaID: &a.ID}
 	ed := NewEditor(ctx, tk, svc)
-	require.Equal(t, "work", ed.area.Value())
+	require.Equal(t, "work", ed.areaName)
+	require.NotNil(t, ed.areaID)
+	require.Equal(t, a.ID, *ed.areaID)
 }
 
 func TestEditor_NewEditorPrefillProject(t *testing.T) {
@@ -199,7 +202,8 @@ func TestEditor_NewEditorEmptyArea(t *testing.T) {
 	_, svc := newTestModelWithService(t)
 	tk := task.Task{ID: id.New(), Title: "x"}
 	ed := NewEditor(context.Background(), tk, svc)
-	require.Empty(t, ed.area.Value())
+	require.Nil(t, ed.areaID)
+	require.Empty(t, ed.areaName)
 	require.Empty(t, ed.project.Value())
 	require.Empty(t, ed.heading.Value())
 }
@@ -214,7 +218,9 @@ func TestEditor_ViewRendersAllNewFields(t *testing.T) {
 	require.Contains(t, out, "Heading")
 }
 
-func TestEditor_SaveEmptyAreaClearsID(t *testing.T) {
+// TestEditor_ApplyAndSaveNilAreaID verifies CP-12 (REQ-6.2): a nil
+// picker selection saves AreaID == nil.
+func TestEditor_ApplyAndSaveNilAreaID(t *testing.T) {
 	_, svc := newTestModelWithService(t)
 	ctx := context.Background()
 	a, err := svc.AddArea(ctx, "work")
@@ -222,13 +228,16 @@ func TestEditor_SaveEmptyAreaClearsID(t *testing.T) {
 	tk, err := svc.AddTask(ctx, app.AddTaskInput{Title: "x", AreaID: &a.ID})
 	require.NoError(t, err)
 	ed := NewEditor(ctx, tk, svc)
-	ed.area.SetValue("")
+	ed.areaID = nil
+	ed.areaName = ""
 	saved, err := ed.ApplyAndSave(ctx, svc)
 	require.NoError(t, err)
 	require.Nil(t, saved.AreaID)
 }
 
-func TestEditor_SaveValidAreaSetsID(t *testing.T) {
+// TestEditor_ApplyAndSaveUsesAreaID verifies CP-12 (REQ-6.1): save
+// persists the picker-selected AreaID without name resolution.
+func TestEditor_ApplyAndSaveUsesAreaID(t *testing.T) {
 	_, svc := newTestModelWithService(t)
 	ctx := context.Background()
 	a, err := svc.AddArea(ctx, "work")
@@ -236,24 +245,26 @@ func TestEditor_SaveValidAreaSetsID(t *testing.T) {
 	tk, err := svc.AddTask(ctx, app.AddTaskInput{Title: "x"})
 	require.NoError(t, err)
 	ed := NewEditor(ctx, tk, svc)
-	ed.area.SetValue("work")
+	ed.areaID = &a.ID
+	ed.areaName = "work"
 	saved, err := ed.ApplyAndSave(ctx, svc)
 	require.NoError(t, err)
 	require.NotNil(t, saved.AreaID)
 	require.Equal(t, a.ID, *saved.AreaID)
 }
 
-func TestEditor_SaveInvalidAreaErrors(t *testing.T) {
-	_, svc := newTestModelWithService(t)
+// TestEditor_EnterOnAreaOpensPicker verifies CP-14 (REQ-1.1): Enter on
+// the Area field opens the area picker sub-state.
+func TestEditor_EnterOnAreaOpensPicker(t *testing.T) {
+	m, svc := newTestModelWithService(t)
 	ctx := context.Background()
 	tk, err := svc.AddTask(ctx, app.AddTaskInput{Title: "x"})
 	require.NoError(t, err)
-	ed := NewEditor(ctx, tk, svc)
-	ed.area.SetValue("nonexistent")
-	_, err = ed.ApplyAndSave(ctx, svc)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "area")
-	require.Contains(t, err.Error(), "nonexistent")
+	m.editor = NewEditor(ctx, tk, svc)
+	m.editor.focus = fieldArea
+	m.screen = screenEditor
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	require.NotNil(t, mm.(Model).editor.picker)
 }
 
 func TestEditor_SaveEmptyProjectClearsBothIDs(t *testing.T) {
@@ -403,21 +414,6 @@ func TestEditor_SaveProjectChangeAutoClearsHeading(t *testing.T) {
 	require.Nil(t, saved.HeadingID, "heading auto-cleared on project change")
 }
 
-func TestEditor_SaveSequentialResolveOrder(t *testing.T) {
-	_, svc := newTestModelWithService(t)
-	ctx := context.Background()
-	tk, err := svc.AddTask(ctx, app.AddTaskInput{Title: "x"})
-	require.NoError(t, err)
-	ed := NewEditor(ctx, tk, svc)
-	ed.area.SetValue("ghost-area")
-	ed.project.SetValue("ghost-project")
-	_, err = ed.ApplyAndSave(ctx, svc)
-	require.Error(t, err)
-	// Area resolves first → error mentions area, not project
-	require.Contains(t, err.Error(), "area")
-	require.NotContains(t, err.Error(), "project")
-}
-
 // TestProp_PreFillRoundTrip verifies CP-2 (REQ-2.2, 3.2, 4.2):
 // pre-filling editor with a task that has IDs, then immediately saving
 // without edits, preserves AreaID/ProjectID/HeadingID.
@@ -469,8 +465,8 @@ func TestProp_PreFillRoundTrip(t *testing.T) {
 	})
 }
 
-// TestProp_EmptyAreaClears verifies CP-3 (REQ-2.3): clearing the area
-// input erases the task's AreaID on save.
+// TestProp_EmptyAreaClears verifies CP-12 (REQ-6.2): clearing the area
+// selection (areaID = nil) erases the task's AreaID on save.
 func TestProp_EmptyAreaClears(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		_, svc, _ := setupRapidModel(rt, "seed")
@@ -485,7 +481,8 @@ func TestProp_EmptyAreaClears(t *testing.T) {
 		tk, err := svc.AddTask(ctx, app.AddTaskInput{Title: "x", AreaID: aid})
 		require.NoError(rt, err)
 		ed := NewEditor(ctx, tk, svc)
-		ed.area.SetValue("")
+		ed.areaID = nil
+		ed.areaName = ""
 		saved, err := ed.ApplyAndSave(ctx, svc)
 		require.NoError(rt, err)
 		require.Nil(rt, saved.AreaID)
@@ -511,23 +508,6 @@ func TestProp_EmptyProjectClearsBoth(t *testing.T) {
 		require.NoError(rt, err)
 		require.Nil(rt, saved.ProjectID)
 		require.Nil(rt, saved.HeadingID)
-	})
-}
-
-// TestProp_InvalidAreaErrors verifies CP-5 (REQ-2.4): unknown area
-// names yield an error mentioning "area".
-func TestProp_InvalidAreaErrors(t *testing.T) {
-	rapid.Check(t, func(rt *rapid.T) {
-		_, svc, _ := setupRapidModel(rt, "seed")
-		ctx := context.Background()
-		tk, err := svc.AddTask(ctx, app.AddTaskInput{Title: "x"})
-		require.NoError(rt, err)
-		name := rapid.StringMatching(`[a-z]{4,12}`).Draw(rt, "name")
-		ed := NewEditor(ctx, tk, svc)
-		ed.area.SetValue("ghost-" + name)
-		_, err = ed.ApplyAndSave(ctx, svc)
-		require.Error(rt, err)
-		require.Contains(rt, err.Error(), "area")
 	})
 }
 
@@ -622,25 +602,6 @@ func TestProp_TabCycleOrder(t *testing.T) {
 	})
 }
 
-// TestProp_SequentialErrorOrder verifies CP-11 (REQ-6.1): when both
-// area and project are invalid, area resolves first, so the surfaced
-// error mentions "area".
-func TestProp_SequentialErrorOrder(t *testing.T) {
-	rapid.Check(t, func(rt *rapid.T) {
-		_, svc, _ := setupRapidModel(rt, "seed")
-		ctx := context.Background()
-		tk, err := svc.AddTask(ctx, app.AddTaskInput{Title: "x"})
-		require.NoError(rt, err)
-		ed := NewEditor(ctx, tk, svc)
-		ed.area.SetValue("ghost-area-" + rapid.StringMatching(`[a-z]{3,8}`).Draw(rt, "a"))
-		ed.project.SetValue("ghost-project-" + rapid.StringMatching(`[a-z]{3,8}`).Draw(rt, "p"))
-		_, err = ed.ApplyAndSave(ctx, svc)
-		require.Error(rt, err)
-		// Area fails first → message contains "area"
-		require.Contains(rt, err.Error(), "area")
-	})
-}
-
 // TestProp_HeadingCaseInsensitive verifies CP-12 (REQ-4.5): heading
 // lookup is case-insensitive — both upper and lower case spellings
 // of a registered heading resolve to its ID.
@@ -693,4 +654,55 @@ func TestProp_ProjectChangeClearsOrphanHeading(t *testing.T) {
 		require.NoError(rt, err)
 		require.Nil(rt, saved.HeadingID)
 	})
+}
+
+// ─── BL-8 area-picker: T-1 preservation tests ────────────────────────────
+
+// TestEditor_ProjectHeadingResolveUnchanged locks the free-text Project/
+// Heading resolution behavior (REQ-7.1) — it must remain identical after
+// the area field becomes a picker.
+func TestEditor_ProjectHeadingResolveUnchanged(t *testing.T) {
+	_, svc := newTestModelWithService(t)
+	ctx := context.Background()
+	p, err := svc.AddProject(ctx, app.AddProjectInput{Name: "proj-pres"})
+	require.NoError(t, err)
+	h, err := svc.AddHeading(ctx, p.ID, "Heading One")
+	require.NoError(t, err)
+	tk, err := svc.AddTask(ctx, app.AddTaskInput{Title: "x"})
+	require.NoError(t, err)
+	ed := NewEditor(ctx, tk, svc)
+	ed.project.SetValue("proj-pres")
+	ed.heading.SetValue("Heading One")
+	saved, err := ed.ApplyAndSave(ctx, svc)
+	require.NoError(t, err)
+	require.NotNil(t, saved.ProjectID)
+	require.Equal(t, p.ID, *saved.ProjectID)
+	require.NotNil(t, saved.HeadingID)
+	require.Equal(t, h.ID, *saved.HeadingID)
+}
+
+// TestEditor_NonAreaFieldsSavePreserved locks that title/notes/start/
+// deadline/tags/when round-trip through ApplyAndSave unchanged.
+func TestEditor_NonAreaFieldsSavePreserved(t *testing.T) {
+	_, svc := newTestModelWithService(t)
+	ctx := context.Background()
+	tk, err := svc.AddTask(ctx, app.AddTaskInput{Title: "x"})
+	require.NoError(t, err)
+	ed := NewEditor(ctx, tk, svc)
+	ed.title.SetValue("renamed title")
+	ed.notes.SetValue("some notes")
+	ed.start.SetValue("2026-06-01")
+	ed.deadline.SetValue("2026-07-01")
+	ed.tags.SetValue("alpha, beta")
+	ed.when = whenSomeday
+	saved, err := ed.ApplyAndSave(ctx, svc)
+	require.NoError(t, err)
+	require.Equal(t, "renamed title", saved.Title)
+	require.Equal(t, "some notes", saved.Notes)
+	require.NotNil(t, saved.StartDate)
+	require.Equal(t, "2026-06-01", saved.StartDate.Format("2006-01-02"))
+	require.NotNil(t, saved.Deadline)
+	require.Equal(t, "2026-07-01", saved.Deadline.Format("2006-01-02"))
+	require.Len(t, saved.Tags, 2)
+	require.True(t, saved.Someday)
 }

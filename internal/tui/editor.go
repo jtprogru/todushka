@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -14,7 +13,6 @@ import (
 	"github.com/jtprogru/todushka/internal/app"
 	"github.com/jtprogru/todushka/internal/domain/id"
 	"github.com/jtprogru/todushka/internal/domain/task"
-	"github.com/jtprogru/todushka/internal/storage"
 )
 
 type editorField int
@@ -48,12 +46,15 @@ type EditorModel struct {
 	notes    textarea.Model
 	start    textinput.Model
 	deadline textinput.Model
-	area     textinput.Model // [NEW]
 	project  textinput.Model // [NEW]
 	heading  textinput.Model // [NEW]
 	tags     textinput.Model
 	when     shellEditorWhen
 	focus    editorField
+
+	areaID   *id.ID      // selected area (nil = Inbox)
+	areaName string      // display name of selected area ("" = Inbox)
+	picker   *areaPicker // non-nil while the area picker is open
 
 	err string
 }
@@ -94,12 +95,10 @@ func NewEditor(ctx context.Context, t task.Task, svc *app.Service) EditorModel {
 		when = whenSomeday
 	}
 
-	areaIn := textinput.New()
-	areaIn.Placeholder = "area name (empty = Inbox)"
-	areaIn.CharLimit = 100
+	var areaName string
 	if t.AreaID != nil {
 		if a, err := svc.Repo().AreaGet(ctx, *t.AreaID); err == nil {
-			areaIn.SetValue(a.Name)
+			areaName = a.Name
 		}
 	}
 
@@ -132,12 +131,13 @@ func NewEditor(ctx context.Context, t task.Task, svc *app.Service) EditorModel {
 		notes:    notesIn,
 		start:    startIn,
 		deadline: dlIn,
-		area:     areaIn,
 		project:  projectIn,
 		heading:  headingIn,
 		tags:     tagsIn,
 		when:     when,
 		focus:    fieldTitle,
+		areaID:   t.AreaID,
+		areaName: areaName,
 	}
 }
 
@@ -151,7 +151,6 @@ func (m *EditorModel) focusCurrent() tea.Cmd {
 	m.notes.Blur()
 	m.start.Blur()
 	m.deadline.Blur()
-	m.area.Blur()
 	m.project.Blur()
 	m.heading.Blur()
 	m.tags.Blur()
@@ -164,8 +163,6 @@ func (m *EditorModel) focusCurrent() tea.Cmd {
 		return m.start.Focus()
 	case fieldDeadline:
 		return m.deadline.Focus()
-	case fieldArea:
-		return m.area.Focus()
 	case fieldProject:
 		return m.project.Focus()
 	case fieldHeading:
@@ -199,8 +196,6 @@ func (m EditorModel) UpdateForm(msg tea.Msg) (EditorModel, tea.Cmd) {
 		m.start, cmd = m.start.Update(msg)
 	case fieldDeadline:
 		m.deadline, cmd = m.deadline.Update(msg)
-	case fieldArea:
-		m.area, cmd = m.area.Update(msg)
 	case fieldProject:
 		m.project, cmd = m.project.Update(msg)
 	case fieldHeading:
@@ -251,20 +246,8 @@ func (m EditorModel) ApplyAndSave(ctx context.Context, svc *app.Service) (task.T
 	}
 	t.Tags = tagIDs
 
-	// Resolve Area
-	areaName := strings.TrimSpace(m.area.Value())
-	if areaName == "" {
-		t.AreaID = nil
-	} else {
-		a, err := svc.Repo().AreaFindByNormalized(ctx, areaName)
-		if err != nil {
-			if errors.Is(err, storage.ErrNotFound) {
-				return task.Task{}, fmt.Errorf("area %q not found", areaName)
-			}
-			return task.Task{}, fmt.Errorf("area %q: %w", areaName, err)
-		}
-		t.AreaID = &a.ID
-	}
+	// Area is selected via the picker (REQ-6.1/6.2) — no name resolution.
+	t.AreaID = m.areaID
 
 	// Resolve Project
 	projectName := strings.TrimSpace(m.project.Value())
@@ -351,7 +334,15 @@ func splitTags(raw string) []string {
 
 // View renders the editor form for the given theme and width.
 func (m EditorModel) View(theme Theme, width int) string {
+	if m.picker != nil {
+		return m.picker.View(theme, width)
+	}
 	label := func(name string) string { return theme.Label.Render(name) }
+
+	areaDisplay := m.areaName
+	if areaDisplay == "" {
+		areaDisplay = "Inbox"
+	}
 
 	field := func(name, content string, focused bool) string {
 		style := theme.Field
@@ -387,7 +378,7 @@ func (m EditorModel) View(theme Theme, width int) string {
 		field("Notes", m.notes.View(), m.focus == fieldNotes),
 		field("Start", m.start.View(), m.focus == fieldStart),
 		field("Deadline", m.deadline.View(), m.focus == fieldDeadline),
-		field("Area", m.area.View(), m.focus == fieldArea),
+		field("Area", areaDisplay, m.focus == fieldArea),
 		field("Project", m.project.View(), m.focus == fieldProject),
 		field("Heading", m.heading.View(), m.focus == fieldHeading),
 		field("Tags", m.tags.View(), m.focus == fieldTags),

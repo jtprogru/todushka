@@ -406,6 +406,19 @@ func (m Model) lookupTagNames(ids []id.ID) ([]string, error) {
 }
 
 func (m Model) handleEditorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.editor.picker != nil {
+		np, res := m.editor.picker.Update(msg, m.service)
+		m.editor.picker = &np
+		switch res.outcome {
+		case pickerCancel:
+			m.editor.picker = nil
+		case pickerSelected:
+			m.editor.areaID = res.areaID
+			m.editor.areaName = res.areaName
+			m.editor.picker = nil
+		}
+		return m, nil
+	}
 	switch {
 	case key.Matches(msg, m.keys.CloseModal):
 		if m.activeProjectID != nil {
@@ -422,6 +435,15 @@ func (m Model) handleEditorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.PrevField):
 		m.editor = m.editor.prevField()
 		return m, m.editor.focusCurrent()
+	case m.editor.focus == fieldArea && msg.Type == tea.KeyEnter:
+		areas, err := m.service.ListAreas(context.Background())
+		if err != nil {
+			m.editor.err = err.Error()
+			return m, nil
+		}
+		p := newAreaPicker(areas, m.editor.areaID, "Inbox", m.readOnly)
+		m.editor.picker = &p
+		return m, nil
 	case m.editor.focus == fieldWhen && msg.Type == tea.KeySpace:
 		if m.editor.when == whenAnytime {
 			m.editor.when = whenSomeday
@@ -651,6 +673,19 @@ func (m Model) handleProjectTasksKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // saves, Tab/Shift+Tab cycle fields, Space on AutoClose toggles bool,
 // everything else dispatches into the focused sub-widget.
 func (m Model) handleProjectEditorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.projectEditor.picker != nil {
+		np, res := m.projectEditor.picker.Update(msg, m.service)
+		m.projectEditor.picker = &np
+		switch res.outcome {
+		case pickerCancel:
+			m.projectEditor.picker = nil
+		case pickerSelected:
+			m.projectEditor.areaID = res.areaID
+			m.projectEditor.areaName = res.areaName
+			m.projectEditor.picker = nil
+		}
+		return m, nil
+	}
 	switch {
 	case key.Matches(msg, m.keys.CloseModal):
 		m.editingProject = false
@@ -672,6 +707,15 @@ func (m Model) handleProjectEditorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.PrevField):
 		m.projectEditor = m.projectEditor.prevField()
 		return m, m.projectEditor.focusCurrent()
+	case m.projectEditor.focus == pefArea && msg.Type == tea.KeyEnter:
+		areas, err := m.service.ListAreas(context.Background())
+		if err != nil {
+			m.projectEditor.err = err.Error()
+			return m, nil
+		}
+		p := newAreaPicker(areas, m.projectEditor.areaID, "No area", m.readOnly)
+		m.projectEditor.picker = &p
+		return m, nil
 	case m.projectEditor.focus == pefAutoClose && msg.Type == tea.KeySpace:
 		m.projectEditor.autoClose = !m.projectEditor.autoClose
 		return m, nil

@@ -277,16 +277,13 @@ func TestProp_EditorSaveRoundTrip(t *testing.T) {
 // CP-11
 func TestProp_EditorInvalidStaysOpen(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		invalidKind := rapid.IntRange(0, 2).Draw(rt, "kind")
+		invalidKind := rapid.IntRange(0, 1).Draw(rt, "kind")
 		svc := app.New(fakes.New(), fixedClock{now: time.Date(2026, 5, 25, 10, 0, 0, 0, time.UTC)})
 		m := newProjectEditor(true, nil, svc)
 		switch invalidKind {
 		case 0:
 			// Empty name (default).
 		case 1:
-			m.name.SetValue("ok")
-			m.area.SetValue("nosuch")
-		case 2:
 			m.name.SetValue("ok")
 			m.deadline.SetValue("bad-date")
 		}

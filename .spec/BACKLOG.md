@@ -45,6 +45,29 @@ CRUD через `ProjectEditorModel`, service `DeleteProject` с reassign
 задач в Inbox. Headings management / bulk-move задач между проектами /
 area picker — deferred v2 (если понадобятся, отдельный pipeline).
 
+### BL-8 — Area picker вместо free-text ввода ✅ done (area-picker)
+Сейчас area задаётся свободным текстом в двух местах: task editor
+(`fieldArea`, `internal/tui/editor.go`) и project editor (`pefArea`,
+`internal/tui/project_editor.go`). Оба резолвят имя через
+`AreaFindByNormalized` и **падают с ошибкой**, если area не найдена;
+создать новую можно только через CLI (`internal/cli/area.go`). Нужен
+интерактивный picker:
+
+- **Охват**: оба редактора (task + project) — единый переиспользуемый
+  компонент, т.к. паттерн идентичен.
+- **Поведение**: список существующих areas (через `svc.ListAreas`) +
+  пункт «Inbox» (пусто, `AreaID = nil`) + **inline create** нового area
+  прямо из пикера (через `svc.AddArea`), без похода в CLI.
+- **Сервис**: `ListAreas` и `AddArea` уже есть — новые методы не нужны.
+- **UI**: готового list/picker-компонента в TUI нет; project-navigation
+  писал свой кастомный список (`internal/tui/project_list.go`) — можно
+  взять как референс или вынести общий помощник.
+- **Открытые вопросы для explore/design phase**: как открывать picker
+  из формы (Enter/Space на поле → overlay vs inline-cycle); сохранять
+  ли free-text как fallback; UX подтверждения inline-create
+  (нормализация имени, дубликаты). Нужен короткий explore прежде чем
+  фиксировать дизайн.
+
 ## Bugs
 
 ### BL-7 — Курсор уезжает за пределы экрана при overflow
@@ -65,7 +88,13 @@ scroll-offset, который следит за курсором (edge-follow + 
    переработка details pane: ширина, контент, стилизация. Один full
    pipeline (затрагивает layout + data fetching).
 3. ~~**project-navigation** (BL-5)~~ ✅ done — отдельный полноценный
-   pipeline. Все 6 пунктов бэклога закрыты.
+   pipeline.
+
+Открытые пункты:
+
+4. ~~**area-picker** (BL-8)~~ ✅ done — full pipeline. Общий
+   `areaPicker` компонент + интеграция в оба редактора + inline-create.
+   Бэклог снова пуст; ждём новых идей.
 
 Решение по группировке остаётся за пользователем; список выше —
 рекомендация для удобства.

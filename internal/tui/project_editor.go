@@ -15,7 +15,6 @@ import (
 	"github.com/jtprogru/todushka/internal/domain/id"
 	"github.com/jtprogru/todushka/internal/domain/project"
 	"github.com/jtprogru/todushka/internal/domain/task"
-	"github.com/jtprogru/todushka/internal/storage"
 )
 
 type projectEditorField int
@@ -35,10 +34,12 @@ type ProjectEditorModel struct {
 	original  *project.Project
 	name      textinput.Model
 	notes     textarea.Model
-	area      textinput.Model
 	deadline  textinput.Model
 	autoClose bool
 	focus     projectEditorField
+	areaID    *id.ID      // selected area (nil = No area)
+	areaName  string      // display name of selected area ("" = No area)
+	picker    *areaPicker // non-nil while the area picker is open
 	err       string
 }
 
@@ -52,10 +53,6 @@ func newProjectEditor(create bool, p *project.Project, svc *app.Service) Project
 	notesIn.CharLimit = 4000
 	notesIn.SetHeight(4)
 
-	areaIn := textinput.New()
-	areaIn.Placeholder = "area name (empty = none)"
-	areaIn.CharLimit = 100
-
 	deadlineIn := textinput.New()
 	deadlineIn.Placeholder = "YYYY-MM-DD"
 	deadlineIn.CharLimit = 10
@@ -63,7 +60,6 @@ func newProjectEditor(create bool, p *project.Project, svc *app.Service) Project
 	m := ProjectEditorModel{
 		name:     nameIn,
 		notes:    notesIn,
-		area:     areaIn,
 		deadline: deadlineIn,
 		focus:    pefName,
 	}
@@ -76,9 +72,10 @@ func newProjectEditor(create bool, p *project.Project, svc *app.Service) Project
 		if p.Deadline != nil {
 			m.deadline.SetValue(p.Deadline.Format("2006-01-02"))
 		}
+		m.areaID = p.AreaID
 		if p.AreaID != nil && svc != nil {
 			if a, err := svc.Repo().AreaGet(context.Background(), *p.AreaID); err == nil {
-				m.area.SetValue(a.Name)
+				m.areaName = a.Name
 			}
 		}
 	}
@@ -87,6 +84,9 @@ func newProjectEditor(create bool, p *project.Project, svc *app.Service) Project
 
 // View renders the editor as a modal panel.
 func (m ProjectEditorModel) View(theme Theme, width int) string {
+	if m.picker != nil {
+		return m.picker.View(theme, width)
+	}
 	label := func(name string) string { return theme.Label.Render(name) }
 	field := func(name, content string, focused bool) string {
 		style := theme.Field
@@ -97,6 +97,10 @@ func (m ProjectEditorModel) View(theme Theme, width int) string {
 			style = style.Width(width - 4)
 		}
 		return label(name) + "\n" + style.Render(content)
+	}
+	areaDisplay := m.areaName
+	if areaDisplay == "" {
+		areaDisplay = "No area"
 	}
 	title := "Edit project"
 	if m.original == nil {
@@ -117,7 +121,7 @@ func (m ProjectEditorModel) View(theme Theme, width int) string {
 		"",
 		field("Name", m.name.View(), m.focus == pefName),
 		field("Notes", m.notes.View(), m.focus == pefNotes),
-		field("Area", m.area.View(), m.focus == pefArea),
+		field("Area", areaDisplay, m.focus == pefArea),
 		field("Deadline", m.deadline.View(), m.focus == pefDeadline),
 		acSection,
 		"",
@@ -132,15 +136,12 @@ func (m ProjectEditorModel) View(theme Theme, width int) string {
 func (m *ProjectEditorModel) focusCurrent() tea.Cmd {
 	m.name.Blur()
 	m.notes.Blur()
-	m.area.Blur()
 	m.deadline.Blur()
 	switch m.focus {
 	case pefName:
 		return m.name.Focus()
 	case pefNotes:
 		return m.notes.Focus()
-	case pefArea:
-		return m.area.Focus()
 	case pefDeadline:
 		return m.deadline.Focus()
 	}
@@ -165,8 +166,6 @@ func (m ProjectEditorModel) UpdateForm(msg tea.Msg) (ProjectEditorModel, tea.Cmd
 		m.name, cmd = m.name.Update(msg)
 	case pefNotes:
 		m.notes, cmd = m.notes.Update(msg)
-	case pefArea:
-		m.area, cmd = m.area.Update(msg)
 	case pefDeadline:
 		m.deadline, cmd = m.deadline.Update(msg)
 	}
@@ -183,19 +182,8 @@ func (m ProjectEditorModel) ApplyAndSave(ctx context.Context, svc *app.Service) 
 	}
 	notes := strings.TrimSpace(m.notes.Value())
 
-	var areaIDPtr *id.ID
-	areaName := strings.TrimSpace(m.area.Value())
-	if areaName != "" {
-		a, err := svc.Repo().AreaFindByNormalized(ctx, areaName)
-		if err != nil {
-			if errors.Is(err, storage.ErrNotFound) {
-				return project.Project{}, false, fmt.Errorf("area %q not found", areaName)
-			}
-			return project.Project{}, false, fmt.Errorf("area %q: %w", areaName, err)
-		}
-		aid := a.ID
-		areaIDPtr = &aid
-	}
+	// Area is selected via the picker (REQ-6.1/6.2) — no name resolution.
+	areaIDPtr := m.areaID
 
 	var deadlinePtr *task.Date
 	if s := strings.TrimSpace(m.deadline.Value()); s != "" {
