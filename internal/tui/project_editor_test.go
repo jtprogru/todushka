@@ -29,17 +29,6 @@ func TestProjectEditor_Save_EmptyName(t *testing.T) {
 	require.Contains(t, err.Error(), "name")
 }
 
-func TestProjectEditor_Save_UnknownArea(t *testing.T) {
-	svc := newEditorTestService(t)
-	m := newProjectEditor(true, nil, svc)
-	m.name.SetValue("x")
-	m.area.SetValue("nosuch")
-	_, _, err := m.ApplyAndSave(context.Background(), svc)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "area")
-	require.Contains(t, err.Error(), "not found")
-}
-
 func TestProjectEditor_Save_MalformedDeadline(t *testing.T) {
 	svc := newEditorTestService(t)
 	m := newProjectEditor(true, nil, svc)
@@ -98,7 +87,9 @@ func TestProjectEditor_Edit_OpensPrefilled(t *testing.T) {
 	m := newProjectEditor(false, &orig, svc)
 	require.Equal(t, "PR Review", m.name.Value())
 	require.Equal(t, "details", m.notes.Value())
-	require.Equal(t, "Work", m.area.Value())
+	require.Equal(t, "Work", m.areaName)
+	require.NotNil(t, m.areaID)
+	require.Equal(t, aid, *m.areaID)
 	require.Equal(t, "2026-12-01", m.deadline.Value())
 	require.True(t, m.autoClose)
 	require.NotNil(t, m.original)
@@ -184,4 +175,67 @@ func TestProjectEditor_Smoke_Defaults(t *testing.T) {
 // projectDateFor builds a task.Date for tests.
 func projectDateFor(year int, month time.Month, day int) task.Date {
 	return task.NewDate(time.Date(year, month, day, 0, 0, 0, 0, time.UTC))
+}
+
+// ─── BL-8 area-picker: T-7 integration tests ─────────────────────────────
+
+// TestProjectEditor_EnterOnAreaOpensPicker verifies CP-14 (REQ-1.1): Enter
+// on the Area field opens the picker sub-state.
+func TestProjectEditor_EnterOnAreaOpensPicker(t *testing.T) {
+	m, svc := newTestModelWithService(t)
+	m.screen = screenProjects
+	m.editingProject = true
+	m.projectEditor = newProjectEditor(true, nil, svc)
+	m.projectEditor.focus = pefArea
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	require.NotNil(t, mm.(Model).projectEditor.picker)
+}
+
+// TestProjectEditor_ApplyAndSaveUsesAreaID verifies CP-12 (REQ-6.1): project
+// save persists the picker-selected AreaID.
+func TestProjectEditor_ApplyAndSaveUsesAreaID(t *testing.T) {
+	ctx := context.Background()
+	svc := newEditorTestService(t)
+	a, err := svc.AddArea(ctx, "Work")
+	require.NoError(t, err)
+	m := newProjectEditor(true, nil, svc)
+	m.name.SetValue("P")
+	m.areaID = &a.ID
+	m.areaName = "Work"
+	p, _, err := m.ApplyAndSave(ctx, svc)
+	require.NoError(t, err)
+	require.NotNil(t, p.AreaID)
+	require.Equal(t, a.ID, *p.AreaID)
+}
+
+// TestProjectEditor_NoAreaLabelIsNoArea verifies REQ-2.2: the project editor
+// renders "No area" when no area is selected.
+func TestProjectEditor_NoAreaLabelIsNoArea(t *testing.T) {
+	svc := newEditorTestService(t)
+	m := newProjectEditor(true, nil, svc)
+	out := m.View(NewTheme(), 80)
+	require.Contains(t, out, "No area")
+}
+
+// ─── BL-8 area-picker: T-1 preservation test ─────────────────────────────
+
+// TestProjectEditor_NonAreaFieldsSavePreserved locks that name/notes/
+// deadline/autoClose round-trip through ApplyAndSave unchanged — must hold
+// after the area field becomes a picker.
+func TestProjectEditor_NonAreaFieldsSavePreserved(t *testing.T) {
+	ctx := context.Background()
+	svc := newEditorTestService(t)
+	m := newProjectEditor(true, nil, svc)
+	m.name.SetValue("My Project")
+	m.notes.SetValue("project notes")
+	m.deadline.SetValue("2026-09-15")
+	m.autoClose = true
+	p, created, err := m.ApplyAndSave(ctx, svc)
+	require.NoError(t, err)
+	require.True(t, created)
+	require.Equal(t, "My Project", p.Name)
+	require.Equal(t, "project notes", p.Notes)
+	require.NotNil(t, p.Deadline)
+	require.Equal(t, "2026-09-15", p.Deadline.Format("2006-01-02"))
+	require.True(t, p.AutoClose)
 }
