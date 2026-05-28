@@ -1,0 +1,21 @@
+{
+  "feature": "area-picker",
+  "phase": "done",
+  "created_at": "2026-05-28T08:05:48Z",
+  "current_artifact": null,
+  "history": [
+    {"phase": "explore", "artifact": "/Users/jtprogru/Work/github/jtprogru/todushka/.spec/features/area-picker/explore.md", "approved_at": "2026-05-28T08:15:04Z"},
+    {"phase": "requirements", "artifact": "/Users/jtprogru/Work/github/jtprogru/todushka/.spec/features/area-picker/requirements.md", "approved_at": "2026-05-28T08:21:39Z"},
+    {"phase": "design", "artifact": "/Users/jtprogru/Work/github/jtprogru/todushka/.spec/features/area-picker/design.md", "approved_at": "2026-05-28T08:30:53Z"},
+    {"phase": "task-plan", "artifact": "/Users/jtprogru/Work/github/jtprogru/todushka/.spec/features/area-picker/task-plan.md", "approved_at": "2026-05-28T08:33:47Z"},
+    {"phase": "implementation", "artifact": "/Users/jtprogru/Work/github/jtprogru/todushka/.spec/features/area-picker/implementation.md", "approved_at": "2026-05-28T09:05:43Z"},
+    {"phase": "review", "artifact": "/Users/jtprogru/Work/github/jtprogru/todushka/.spec/features/area-picker/review.md", "approved_at": "2026-05-28T09:48:03Z"}
+  ],
+  "review_base_commit": "2270c73d30ac7ecbb7c7c348182df51158b49811",
+  "branch": "feature/area-picker",
+  "worktree": null,
+  "last_completed_task": null,
+  "finish_action": "pr",
+  "finished_at": "2026-05-28T09:49:53Z",
+  "finish_base": null
+}
