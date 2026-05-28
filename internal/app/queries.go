@@ -170,7 +170,12 @@ func (s *Service) ListProjectsSorted(ctx context.Context, areaID *id.ID, include
 		if projects[i].Position != projects[j].Position {
 			return projects[i].Position < projects[j].Position
 		}
-		return strings.ToLower(projects[i].Name) < strings.ToLower(projects[j].Name)
+		if ni, nj := strings.ToLower(projects[i].Name), strings.ToLower(projects[j].Name); ni != nj {
+			return ni < nj
+		}
+		// Final tiebreaker on ID keeps the order deterministic when Position
+		// and Name are equal (repo iteration order is non-deterministic).
+		return projects[i].ID < projects[j].ID
 	})
 	return projects, nil
 }
