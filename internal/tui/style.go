@@ -38,6 +38,7 @@ type Theme struct {
 	FieldFocus  lipgloss.Style
 	Label       lipgloss.Style
 	DetailLabel lipgloss.Style
+	Star        lipgloss.Style // ★ today-marker in Anytime
 }
 
 type palette struct {
@@ -143,6 +144,7 @@ func newColorTheme(p palette) Theme {
 		Padding(0, 1)
 	t.Label = lipgloss.NewStyle().Bold(true).Foreground(t.Subtext)
 	t.DetailLabel = lipgloss.NewStyle().Bold(true).Foreground(t.Accent)
+	t.Star = lipgloss.NewStyle().Bold(true).Foreground(t.Warning)
 	return t
 }
 
@@ -171,5 +173,6 @@ func NewMonochromeTheme() Theme {
 		FieldFocus:  lipgloss.NewStyle().Border(lipgloss.ThickBorder()).Padding(0, 1),
 		Label:       bold,
 		DetailLabel: bold,
+		Star:        bold,
 	}
 }
