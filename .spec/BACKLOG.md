@@ -108,12 +108,11 @@ code до появления самого состояния This Evening).
 
 ### Фаза B — точность планирования (концептуальное ядро Things)
 
-#### BL-11 — Богатый «When» picker (overlay)
-Сейчас редактор (`fieldWhen`, `internal/tui/editor.go`) переключает лишь
-Anytime↔Someday. Нужен overlay-пикер: Today / This Evening / выбрать
-дату / Someday / очистить — по образцу `areaPicker` (BL-8,
-`internal/tui/area_picker.go`). Пишет в `StartDate`/`Someday`/новое
-поле This Evening.
+#### BL-11 — Богатый «When» picker (overlay) ✅ done (when-picker)
+Реализован overlay `whenPicker` (`internal/tui/when_picker.go`): Today /
+Pick date… / Someday / Anytime — заменил free-text поле `Start` и тумблер
+Anytime/Someday в task-editor. «Today» → `StartDate=today`. Строка This
+Evening **не вошла** — она требует нового состояния (BL-12).
 
 #### BL-12 — Зона This Evening в Today
 Новое состояние (флаг на задаче или производное от StartDate) +
@@ -172,7 +171,9 @@ completed/cancelled визуально.
 Things 3 parity (новые pipeline'ы, по фазам — порядок = приоритет):
 
 5. ~~**things-visual** (BL-9, BL-10) — фаза A, fast-track, без архитектуры.~~ ✅ done — кольцо прогресса + звезда «today» + faint завершённых; `Theme.Star` (релиз minor v0.11.0).
-6. **things-scheduling** (BL-11, BL-12, BL-13) — фаза B, full pipeline.
+6. **things-scheduling** — фаза B. BL-11 ✅ done (отдельный pipeline
+   `when-picker`, релиз minor); осталось BL-12 (This Evening + moon) и
+   BL-13 (группировка Upcoming/Logbook).
 7. **things-structure** (BL-14, BL-15, BL-16) — фаза C, можно дробить.
 8. **things-sidebar** (BL-17) — фаза D, крупный рефактор, последним.
 
