@@ -256,3 +256,97 @@ func TestModel_ViewList_BodyLineCountBounded(t *testing.T) {
 		"viewList body must not exceed visibleRows (%d), got %d lines",
 		visibleRows(m), bodyLines)
 }
+
+// ─── PgUp/PgDown paging ──────────────────────────────────────────────
+
+func openTaskModel(t *testing.T, n int) Model {
+	t.Helper()
+	m := newTestModel(t)
+	m.height = 20
+	m.width = 80
+	tasks := make([]task.Task, n)
+	for i := range tasks {
+		tasks[i] = task.Task{ID: id.New(), Title: fmt.Sprintf("t-%03d", i), Status: task.StatusOpen}
+	}
+	m.tasks = tasks
+	return m
+}
+
+func TestModel_PageDown_AdvancesByOnePage(t *testing.T) {
+	m := openTaskModel(t, 100)
+	step := pageStep(m)
+	require.Greater(t, step, 0)
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	m = mm.(Model)
+	require.Equal(t, step, m.cursor)
+}
+
+func TestModel_PageUp_RetreatsByOnePage(t *testing.T) {
+	m := openTaskModel(t, 100)
+	m.cursor = 99
+	step := pageStep(m)
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	m = mm.(Model)
+	require.Equal(t, 99-step, m.cursor)
+}
+
+func TestModel_PageDown_ClampsAtEnd(t *testing.T) {
+	m := openTaskModel(t, 5) // fewer rows than a page
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	m = mm.(Model)
+	require.Equal(t, 4, m.cursor)
+}
+
+func TestModel_PageUp_ClampsAtStart(t *testing.T) {
+	m := openTaskModel(t, 100)
+	m.cursor = 2
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	m = mm.(Model)
+	require.Equal(t, 0, m.cursor)
+}
+
+func TestModel_PageDown_EmptyListStaysZero(t *testing.T) {
+	m := openTaskModel(t, 0)
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	m = mm.(Model)
+	require.Equal(t, 0, m.cursor)
+}
+
+func TestModel_PageDown_ProjectsScreen(t *testing.T) {
+	m := newTestModel(t)
+	m.screen = screenProjects
+	m.height = 20
+	m.width = 80
+	projects := make([]project.Project, 100)
+	for i := range projects {
+		projects[i] = project.Project{ID: id.New(), Name: fmt.Sprintf("p-%03d", i), Status: project.StatusOpen}
+	}
+	m.projects = projects
+	step := pageStep(m)
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	m = mm.(Model)
+	require.Equal(t, step, m.projectCursor)
+}
+
+func TestModel_PageDown_ProjectTasksScreen(t *testing.T) {
+	m := openTaskModel(t, 100)
+	pid := id.New()
+	m.screen = screenProjectTasks
+	m.activeProjectID = &pid
+	m.projectTasks = m.tasks
+	step := pageStep(m)
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	m = mm.(Model)
+	require.Equal(t, step, m.cursor)
+}
+
+func TestModel_PageDown_CursorStaysVisible(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.Ascii)
+	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
+
+	m := openTaskModel(t, 100)
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	m = mm.(Model)
+	require.NotEmpty(t, findCursorLine(m.View()),
+		"cursor marker must remain visible after PgDown")
+}

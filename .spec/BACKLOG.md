@@ -78,6 +78,80 @@ area picker — deferred v2 (если понадобятся, отдельный
 — пользователь не видит, что выбрано. Нужен viewport со
 scroll-offset, который следит за курсором (edge-follow + scrolloff).
 
+## Things 3 parity (роадмап)
+
+Цель — приблизить TUI к ощущению Things 3. Ключевой факт: доменный слой
+уже моделирует почти весь Things (`task.Task`: `AreaID`, `ProjectID`,
+`HeadingID`, `Tags`, `StartDate`=When, `Deadline`, `Someday`,
+`PinnedToday`, `Checklist`, `Repeat`; `project.Project`:
+`Deadline`/`AutoClose`/`Headings`; все шесть списков в `internal/app`).
+Поэтому работа почти целиком в presentation-слое (`internal/tui`), новых
+схем почти не требуется.
+
+Вне scope для TUI: drag «Magic Plus», слияние событий OS-календаря,
+анимации. Capture через quick-entry (`#tag @today @project !date`) уже
+закрывает сценарий быстрого ввода.
+
+### Фаза A — визуальная идентичность (fast-track, без смены архитектуры)
+
+#### BL-9 — Progress ring у проектов
+`projectCounts [open,total]` / `CountProjectTasks` уже есть; сейчас
+показываются числом. Рендерить как кольцо прогресса (○ ◔ ◑ ◕ ●) рядом с
+именем проекта в `internal/tui/project_list.go` (опц. агрегат по area
+позже). Чистый рендер, без новых данных.
+
+#### BL-10 — Визуальные маркеры Today
+Жёлтая звезда у задач Today, когда они видны в Anytime; иконка-луна для
+This Evening (готовим под BL-12); полировка глифов completed/cancelled
+в `viewList` (`internal/tui/app.go`), акценты и воздух. Опирается на
+палитру в `internal/tui/style.go`.
+
+### Фаза B — точность планирования (концептуальное ядро Things)
+
+#### BL-11 — Богатый «When» picker (overlay)
+Сейчас редактор (`fieldWhen`, `internal/tui/editor.go`) переключает лишь
+Anytime↔Someday. Нужен overlay-пикер: Today / This Evening / выбрать
+дату / Someday / очистить — по образцу `areaPicker` (BL-8,
+`internal/tui/area_picker.go`). Пишет в `StartDate`/`Someday`/новое
+поле This Evening.
+
+#### BL-12 — Зона This Evening в Today
+Новое состояние (флаг на задаче или производное от StartDate) +
+разделитель в списке Today (дневные сверху, вечерние снизу под луной) +
+toggle показа. Зависит от BL-11 (общий выбор состояния When).
+
+#### BL-13 — Группировка Upcoming по дням и Logbook по датам
+Сейчас списки плоские. Добавить заголовки-группы по дате в рендере
+`ListUpcoming`/`ListLogbook`. Logbook — по дате завершения, различать
+completed/cancelled визуально.
+
+### Фаза C — структура и группировка
+
+#### BL-14 — Headings: рендер по группам + CRUD
+Отложенная половина BL-5. Группировать задачи проекта под headings в
+`internal/tui/project_tasks.go`; CRUD heading (домен `Heading`,
+`HeadingID`, кэш `headingNamesByID` уже есть). Drag-группы — N/A в TUI,
+вместо этого move-под-heading клавишами.
+
+#### BL-15 — Tag filter bar (чипы) + фильтр по тегам
+Сейчас `/`-фильтр — это regex по заголовку (`internal/tui/filter.go`).
+Добавить строку чипов активных тегов сверху списка + фильтрацию по
+выбранному тегу (теги уже в домене и в details).
+
+#### BL-16 — Inline-редактирование чеклиста
+`task.Checklist []ChecklistItem` уже есть; добавить добавление /
+переключение / удаление пунктов прямо в task editor
+(`internal/tui/editor.go`).
+
+### Фаза D — постоянный сайдбар (определяющий лейаут, крупнейший рефактор)
+
+#### BL-17 — Persistent sidebar
+Заменить header-tabs + отдельный `screenProjects` на левый сайдбар
+(шесть списков + дерево Areas→Projects) | основной список | details.
+Затрагивает монолитный `Model` (63 поля) и dispatch во `View`
+(`internal/tui/app.go`). Делать последним; желательно после выделения
+саб-компонентов. Высокий payoff, высокий риск.
+
 ## Группировка для планирования (предложение)
 
 Можно сгруппировать в 3 будущих feature-pipeline'а:
@@ -94,7 +168,13 @@ scroll-offset, который следит за курсором (edge-follow + 
 
 4. ~~**area-picker** (BL-8)~~ ✅ done — full pipeline. Общий
    `areaPicker` компонент + интеграция в оба редактора + inline-create.
-   Бэклог снова пуст; ждём новых идей.
+
+Things 3 parity (новые pipeline'ы, по фазам — порядок = приоритет):
+
+5. **things-visual** (BL-9, BL-10) — фаза A, fast-track, без архитектуры.
+6. **things-scheduling** (BL-11, BL-12, BL-13) — фаза B, full pipeline.
+7. **things-structure** (BL-14, BL-15, BL-16) — фаза C, можно дробить.
+8. **things-sidebar** (BL-17) — фаза D, крупный рефактор, последним.
 
 Решение по группировке остаётся за пользователем; список выше —
 рекомендация для удобства.

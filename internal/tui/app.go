@@ -345,6 +345,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor++
 		}
 		return m, nil
+	case key.Matches(msg, m.keys.PageUp):
+		m.cursor = clampCursor(m.cursor-pageStep(m), len(m.tasks))
+		return m, nil
+	case key.Matches(msg, m.keys.PageDown):
+		m.cursor = clampCursor(m.cursor+pageStep(m), len(m.tasks))
+		return m, nil
 	case key.Matches(msg, m.keys.Enter):
 		return m.openEditor()
 	case key.Matches(msg, m.keys.QuickEntry):
@@ -512,6 +518,12 @@ func (m Model) handleProjectsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.projectCursor++
 		}
 		return m, nil
+	case key.Matches(msg, m.keys.PageUp):
+		m.projectCursor = clampCursor(m.projectCursor-pageStep(m), len(displayedProjects(m)))
+		return m, nil
+	case key.Matches(msg, m.keys.PageDown):
+		m.projectCursor = clampCursor(m.projectCursor+pageStep(m), len(displayedProjects(m)))
+		return m, nil
 	case key.Matches(msg, m.keys.Filter):
 		m.filtering = true
 		m.filterQuery = ""
@@ -651,6 +663,12 @@ func (m Model) handleProjectTasksKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.cursor < len(m.tasks)-1 {
 			m.cursor++
 		}
+		return m, nil
+	case key.Matches(msg, m.keys.PageUp):
+		m.cursor = clampCursor(m.cursor-pageStep(m), len(m.tasks))
+		return m, nil
+	case key.Matches(msg, m.keys.PageDown):
+		m.cursor = clampCursor(m.cursor+pageStep(m), len(m.tasks))
 		return m, nil
 	case key.Matches(msg, m.keys.Enter):
 		return m.openEditor()
@@ -1089,7 +1107,7 @@ func (m Model) viewHelp() string {
 	binds := []key.Binding{
 		m.keys.Help, m.keys.Quit,
 		m.keys.Inbox, m.keys.Today, m.keys.Upcoming, m.keys.Anytime, m.keys.Someday, m.keys.Logbook,
-		m.keys.Up, m.keys.Down,
+		m.keys.Up, m.keys.Down, m.keys.PageUp, m.keys.PageDown,
 		m.keys.QuickEntry, m.keys.Complete, m.keys.Cancel, m.keys.Delete, m.keys.PinToday, m.keys.Refresh,
 		m.keys.Filter, m.keys.ToggleSelect, m.keys.SelectAll, m.keys.ClearSelection,
 	}
