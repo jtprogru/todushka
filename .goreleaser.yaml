@@ -100,15 +100,11 @@ homebrew_casks:
     homepage: "https://github.com/jtprogru/todushka"
     description: "Terminal Things 3: a keyboard-first TUI todo manager with Inbox / Today / Upcoming workflow and embedded local store"
     license: "MIT"
-    url:
-      verified: "github.com/jtprogru/todushka"
     commit_author:
       name: goreleaserbot
       email: bot@goreleaser.com
     commit_msg_template: "chore(todushka): bring cask to {{ .Tag }}"
-    hooks:
-      post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/todushka"]
-          end
+    custom_block: |
+      postflight_steps do
+        run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/todushka"]
+      end
