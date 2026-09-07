@@ -98,7 +98,7 @@ homebrew_casks:
       branch: main
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: "https://github.com/jtprogru/todushka"
-    description: "Terminal Things 3: a keyboard-first TUI todo manager with Inbox / Today / Upcoming workflow and embedded local store"
+    description: "Keyboard-first TUI todo manager with Inbox/Today/Upcoming workflow"
     license: "MIT"
     commit_author:
       name: goreleaserbot
